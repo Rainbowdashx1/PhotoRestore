@@ -55,3 +55,21 @@ export function initDropzone(dropzone) {
         }
     });
 }
+
+// Animación "hint": desliza el divisor 50 → 40 → 60 → 50 al mostrar el
+// resultado, para insinuar que el comparador es arrastrable. Usa el atributo
+// `value` (0..100) del componente. Se ejecuta una sola vez por elemento.
+export function hintComparison(slider) {
+    if (!slider || slider.dataset.hintDone) return;
+    slider.dataset.hintDone = '1';
+    if (typeof gsap === 'undefined') return;
+
+    const pos = { v: 50 };
+    gsap.to(pos, {
+        keyframes: [{ v: 40 }, { v: 60 }, { v: 50 }],
+        duration: 1.6,
+        delay: 0.4,
+        ease: 'power1.inOut',
+        onUpdate: () => slider.setAttribute('value', pos.v.toFixed(1))
+    });
+}

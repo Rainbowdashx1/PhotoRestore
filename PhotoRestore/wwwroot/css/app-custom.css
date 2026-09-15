@@ -314,10 +314,29 @@ a {
 .comparison-wrap img-comparison-slider {
     display: block;
     width: 100%;
-    --divider-width: 2px;
-    --divider-color: #fff;
-    --default-handle-color: #fff;
-    --default-handle-opacity: 0.95;
+    cursor: ew-resize;
+    --divider-width: 4px;
+    --divider-color: var(--accent-b);
+    --divider-shadow: 0 0 10px rgba(34, 211, 238, 0.8);
+}
+
+/* Handle personalizado (slot="handle"): círculo con degradado y chevrones. */
+.cmp-handle {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6), 0 0 14px rgba(139, 92, 246, 0.55);
+    border: 2px solid rgba(255, 255, 255, 0.85);
+}
+
+.cmp-handle svg {
+    width: 26px;
+    height: 26px;
+    stroke: #fff;
 }
 
 .comparison-wrap img {

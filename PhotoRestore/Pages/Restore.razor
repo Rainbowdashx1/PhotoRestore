@@ -83,9 +83,16 @@
     <div class="glass-card result-card fade-in">
         <span class="card-label">Resultado</span>
         <div class="comparison-wrap">
-            <img-comparison-slider>
+            <img-comparison-slider @ref="sliderRef">
                 <img slot="first" src="@originalUrl" alt="Imagen original" />
                 <img slot="second" src="@resultUrl" alt="Imagen restaurada" />
+                <div slot="handle" class="cmp-handle" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+                         stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 6 4 12 9 18" />
+                        <polyline points="15 6 20 12 15 18" />
+                    </svg>
+                </div>
             </img-comparison-slider>
             <span class="cmp-label before">Antes</span>
             <span class="cmp-label after">Después</span>
@@ -114,6 +121,8 @@
     private IJSObjectReference? uiModule;
     private DotNetObjectReference<Restore>? progressRef;
     private ElementReference dropzoneRef;
+    private ElementReference sliderRef;
+    private bool hintPendiente;
 
     private byte[]? imagenBytes;
     private string? imagenMime;
@@ -152,6 +161,13 @@
 
             await uiModule.InvokeVoidAsync("initAnimations");
             await uiModule.InvokeVoidAsync("initDropzone", dropzoneRef);
+        }
+
+        // El comparador acaba de aparecer: animación "hint" una sola vez.
+        if (hintPendiente && resultUrl is not null && uiModule is not null)
+        {
+            hintPendiente = false;
+            await uiModule.InvokeVoidAsync("hintComparison", sliderRef);
         }
     }
 
@@ -220,6 +236,7 @@
             backend = result.Backend;
             resultWidth = result.Width;
             resultHeight = result.Height;
+            hintPendiente = true;
         }
         catch (Exception ex)
         {
