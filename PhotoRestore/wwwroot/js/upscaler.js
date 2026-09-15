@@ -2,8 +2,14 @@
 // El modelo siempre trabaja a 4x internamente; la salida se reescala al factor
 // elegido (1, 2 o 4). Toda la inferencia se ejecuta en el dispositivo:
 // la imagen nunca se sube a ningún servidor.
+//
+// El modelo NO se pasa a ONNX Runtime por URL: se descarga manualmente con
+// fetch (cache: 'no-cache', con un reintento), se valida su tamaño y se crea la
+// sesión desde los bytes. Así los errores de descarga llegan a la UI con
+// mensajes claros en lugar de un "Failed to fetch" opaco de ort.
 
 const MODEL_URL = './models/realesrgan-x4.onnx';
+const MODEL_MIN_BYTES = 1_000_000; // el .onnx real ocupa 4.866.429 bytes
 const SCALE = 4;    // factor nativo del modelo Real-ESRGAN x4
 const TILE = 128;   // tamaño del tile de entrada (px)
 const OVERLAP = 10; // solape entre tiles (px de entrada) para evitar costuras
@@ -15,15 +21,42 @@ export function webGpuSupported() {
     return typeof navigator !== 'undefined' && 'gpu' in navigator;
 }
 
-// Crea la sesión una sola vez. Se intenta WebGPU primero y se cae a WASM (CPU)
-// de forma explícita, para poder informar del motor que realmente se usa.
+// Descarga el modelo con un reintento y mensajes de error autoexplicativos.
+async function fetchModel() {
+    let lastError = null;
+    for (let intento = 1; intento <= 2; intento++) {
+        try {
+            console.log(`Descargando modelo (intento ${intento})…`);
+            const resp = await fetch(MODEL_URL, { cache: 'no-cache' });
+            if (!resp.ok)
+                throw new Error(`Error del servidor al descargar el modelo: HTTP ${resp.status}`);
+            const buffer = await resp.arrayBuffer();
+            if (buffer.byteLength < MODEL_MIN_BYTES)
+                throw new Error(`El modelo descargado parece incompleto (${buffer.byteLength} bytes); recarga la página e inténtalo de nuevo.`);
+            return buffer;
+        } catch (err) {
+            lastError = err;
+            console.warn(`Fallo al descargar el modelo (intento ${intento}).`, err);
+            if (intento < 2)
+                await new Promise(r => setTimeout(r, 800));
+        }
+    }
+    if (lastError instanceof TypeError) // error de red de fetch
+        throw new Error(`No se pudo descargar el modelo (¿el servidor sigue corriendo?): ${lastError.message}`);
+    throw lastError;
+}
+
+// Crea la sesión una sola vez a partir de los bytes del modelo.
+// Se intenta WebGPU primero y se cae a WASM (CPU) de forma explícita,
+// para poder informar del motor que realmente se usa.
 async function getSession() {
     if (session) return session;
+    const modelBytes = new Uint8Array(await fetchModel());
     const providers = webGpuSupported() ? ['webgpu', 'wasm'] : ['wasm'];
     let lastError = null;
     for (const ep of providers) {
         try {
-            session = await ort.InferenceSession.create(MODEL_URL, {
+            session = await ort.InferenceSession.create(modelBytes, {
                 executionProviders: [ep],
                 graphOptimizationLevel: 'all'
             });

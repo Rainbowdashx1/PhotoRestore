@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 
 <head>
     <meta charset="utf-8" />
@@ -9,6 +9,11 @@
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="css/app.css" />
+    <!-- Tipografías desde Google Fonts (prototipo). Producción: autoalojar los woff2. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/app-custom.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="PhotoRestore.styles.css" rel="stylesheet" />
     <script type="importmap"></script>
@@ -31,6 +36,11 @@
     <!-- ONNX Runtime Web desde CDN (prototipo, versión fijada).
          Para producción, autoalojar los dist de ort en wwwroot/lib/ort. -->
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
+    <!-- Librerías de UI desde CDN (prototipo, versiones fijadas).
+         Para producción, autoalojar en wwwroot/lib/. -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@lottiefiles/lottie-player@2.0.12/dist/lottie-player.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/index.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
 </body>
 
