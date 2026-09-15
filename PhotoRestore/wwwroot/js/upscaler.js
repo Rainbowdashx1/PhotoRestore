@@ -16,6 +16,7 @@ const OVERLAP = 10; // solape entre tiles (px de entrada) para evitar costuras
 
 let session = null;
 let backend = null;
+let forceWasm = false; // se activa si WebGPU falla en la primera inferencia
 
 export function webGpuSupported() {
     return typeof navigator !== 'undefined' && 'gpu' in navigator;
@@ -52,7 +53,7 @@ async function fetchModel() {
 async function getSession() {
     if (session) return session;
     const modelBytes = new Uint8Array(await fetchModel());
-    const providers = webGpuSupported() ? ['webgpu', 'wasm'] : ['wasm'];
+    const providers = (!forceWasm && webGpuSupported()) ? ['webgpu', 'wasm'] : ['wasm'];
     let lastError = null;
     for (const ep of providers) {
         try {
@@ -92,9 +93,29 @@ export async function getImageSize(bytes, mimeType) {
 // progressHelper es un DotNetObjectReference con un método [JSInvokable]
 // OnTileDone(int done, int total) que se invoca tras cada tile.
 // Devuelve { resultUrl, backend, width, height } (dimensiones de salida).
+// La sesión WebGPU puede crearse bien pero fallar un op en la primera
+// inferencia: en ese caso se libera y se reintenta todo con WASM (CPU).
 export async function upscale(bytes, mimeType, progressHelper, scale) {
     if (![1, 2, 4].includes(scale))
         throw new Error(`Factor de salida no válido: ${scale} (solo 1, 2 o 4)`);
+    try {
+        return await upscaleInterno(bytes, mimeType, progressHelper, scale);
+    } catch (err) {
+        if (forceWasm || backend !== 'webgpu') throw err;
+        console.warn('WebGPU falló durante la inferencia; reintentando con WASM (CPU).', err);
+        forceWasm = true;
+        try { await session?.release?.(); } catch { /* mejor esfuerzo */ }
+        session = null;
+        backend = null;
+        try {
+            return await upscaleInterno(bytes, mimeType, progressHelper, scale);
+        } catch (errWasm) {
+            throw new Error(`Falló WebGPU (${err.message}) y también WASM (${errWasm.message})`);
+        }
+    }
+}
+
+async function upscaleInterno(bytes, mimeType, progressHelper, scale) {
 
     const sess = await getSession();
     const bitmap = await createImageBitmap(new Blob([bytes], { type: mimeType }));

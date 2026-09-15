@@ -36,23 +36,49 @@
 </div>
 
 <div class="glass-card anim-enter">
-    <span class="card-label">Factor de salida</span>
+    <span class="card-label">Modo de restauración</span>
     <div class="scale-pills">
-        @foreach (var f in new[] { 1, 2, 4 })
+        <label class="pill @(modo == "general" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="general" checked="@(modo == "general")"
+                   disabled="@ocupado" @onchange='() => modo = "general"' />
+            General · Real-ESRGAN (mejora y amplía)
+        </label>
+        <label class="pill @(modo == "caras" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="caras" checked="@(modo == "caras")"
+                   disabled="@ocupado" @onchange='() => modo = "caras"' />
+            Caras · GFPGAN (fotos antiguas, rostros)
+        </label>
+    </div>
+</div>
+
+@if (modo == "general")
+{
+    <div class="glass-card anim-enter">
+        <span class="card-label">Factor de salida</span>
+        <div class="scale-pills">
+            @foreach (var f in new[] { 1, 2, 4 })
+            {
+                var valor = f;
+                <label class="pill @(factor == valor ? "active" : "") @(ocupado ? "disabled" : "")">
+                    <input type="radio" name="factor" value="@valor" checked="@(factor == valor)"
+                           disabled="@ocupado" @onchange="() => factor = valor" />
+                    @EtiquetaFactor(valor)
+                </label>
+            }
+        </div>
+        @if (imagenAncho > 0)
         {
-            var valor = f;
-            <label class="pill @(factor == valor ? "active" : "") @(ocupado ? "disabled" : "")">
-                <input type="radio" name="factor" value="@valor" checked="@(factor == valor)"
-                       disabled="@ocupado" @onchange="() => factor = valor" />
-                @EtiquetaFactor(valor)
-            </label>
+            <p class="output-hint">Salida: <strong>@(imagenAncho * factor) × @(imagenAlto * factor) px</strong></p>
         }
     </div>
-    @if (imagenAncho > 0)
-    {
-        <p class="output-hint">Salida: <strong>@(imagenAncho * factor) × @(imagenAlto * factor) px</strong></p>
-    }
-</div>
+}
+else
+{
+    <div class="glass-card">
+        <span class="card-label">Factor de salida</span>
+        <p class="output-hint" style="margin-top: 0;">Las caras se restauran en su tamaño original; la foto mantiene sus dimensiones.</p>
+    </div>
+}
 
 <button class="btn-restore" @onclick="Restaurar" disabled="@(imagenBytes is null || ocupado)">
     @(ocupado ? "Procesando…" : "Restaurar")
@@ -76,6 +102,11 @@
 @if (!string.IsNullOrEmpty(error))
 {
     <div class="glass-card error-card fade-in">@error</div>
+}
+
+@if (!string.IsNullOrEmpty(info))
+{
+    <div class="glass-card fade-in" style="color: var(--text-muted);">@info</div>
 }
 
 @if (resultUrl is not null && originalUrl is not null)
@@ -118,6 +149,7 @@
     private const long MaxFileSize = 25 * 1024 * 1024; // 25 MB
 
     private IJSObjectReference? module;
+    private IJSObjectReference? faceModule;
     private IJSObjectReference? uiModule;
     private DotNetObjectReference<Restore>? progressRef;
     private ElementReference dropzoneRef;
@@ -129,6 +161,7 @@
     private string? imagenNombre;
     private int imagenAncho;
     private int imagenAlto;
+    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN)
     private int factor = 1;
     private string? originalUrl;
     private string? resultUrl;
@@ -137,12 +170,15 @@
     private string? backend;
     private string? estado;
     private string? error;
+    private string? info;
     private int tilesDone;
     private int tilesTotal;
     private bool ocupado;
 
     private string NombreDescarga =>
-        $"{Path.GetFileNameWithoutExtension(imagenNombre ?? "imagen")}-x{factor}.png";
+        $"{Path.GetFileNameWithoutExtension(imagenNombre ?? "imagen")}-{SufijoDescarga}.png";
+
+    private string SufijoDescarga => modo == "caras" ? "caras" : $"x{factor}";
 
     private static string EtiquetaFactor(int f) => f switch
     {
@@ -156,6 +192,7 @@
         if (firstRender)
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/upscaler.js");
+            faceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/face-restore.js");
             uiModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/ui.js");
             progressRef = DotNetObjectReference.Create(this);
 
@@ -174,6 +211,7 @@
     private async Task CargarImagen(InputFileChangeEventArgs e)
     {
         error = null;
+        info = null;
         resultUrl = null;
         backend = null;
         estado = null;
@@ -219,24 +257,33 @@
 
     private async Task Restaurar()
     {
-        if (module is null || progressRef is null || imagenBytes is null)
+        if (progressRef is null || imagenBytes is null)
             return;
 
         ocupado = true;
         error = null;
+        info = null;
         resultUrl = null;
         tilesDone = 0;
         tilesTotal = 0;
-        estado = "Cargando modelo Real-ESRGAN…";
 
         try
         {
-            var result = await module.InvokeAsync<UpscaleResult>("upscale", imagenBytes, imagenMime, progressRef, factor);
-            resultUrl = result.ResultUrl;
-            backend = result.Backend;
-            resultWidth = result.Width;
-            resultHeight = result.Height;
-            hintPendiente = true;
+            if (modo == "caras")
+            {
+                await RestaurarCaras();
+            }
+            else
+            {
+                if (module is null) return;
+                estado = "Cargando modelo Real-ESRGAN…";
+                var result = await module.InvokeAsync<UpscaleResult>("upscale", imagenBytes, imagenMime, progressRef, factor);
+                resultUrl = result.ResultUrl;
+                backend = result.Backend;
+                resultWidth = result.Width;
+                resultHeight = result.Height;
+                hintPendiente = true;
+            }
         }
         catch (Exception ex)
         {
@@ -249,12 +296,46 @@
         }
     }
 
+    private async Task RestaurarCaras()
+    {
+        if (faceModule is null) return;
+        estado = "Cargando modelos de restauración de caras (~340 MB la primera vez)…";
+        var result = await faceModule.InvokeAsync<FaceResult>("restoreFaces", imagenBytes, imagenMime, progressRef);
+        if (result.ResultUrl is null)
+        {
+            info = "No se detectaron caras en la imagen. Prueba con el modo General o con otra foto.";
+            return;
+        }
+        resultUrl = result.ResultUrl;
+        backend = result.Backend;
+        resultWidth = result.Width;
+        resultHeight = result.Height;
+        info = result.Faces == 1 ? "Se restauró 1 cara." : $"Se restauraron {result.Faces} caras.";
+        hintPendiente = true;
+    }
+
     [JSInvokable]
     public void OnTileDone(int done, int total)
     {
         tilesDone = done;
         tilesTotal = total;
         estado = $"Procesando tile {done} de {total}";
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnEstado(string texto)
+    {
+        estado = texto;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnCaraDone(int done, int total)
+    {
+        tilesDone = done;
+        tilesTotal = total;
+        estado = $"Restaurando cara {done} de {total}";
         StateHasChanged();
     }
 
@@ -265,6 +346,8 @@
         {
             if (module is not null)
                 await module.DisposeAsync();
+            if (faceModule is not null)
+                await faceModule.DisposeAsync();
             if (uiModule is not null)
                 await uiModule.DisposeAsync();
         }
@@ -286,5 +369,14 @@
         public string Backend { get; set; } = "";
         public int Width { get; set; }
         public int Height { get; set; }
+    }
+
+    private sealed class FaceResult
+    {
+        public string? ResultUrl { get; set; }
+        public string Backend { get; set; } = "";
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public int Faces { get; set; }
     }
 }
