@@ -3,89 +3,117 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-<PageTitle>Restaurar</PageTitle>
+<PageTitle>PhotoRestore — Restauración de fotos con IA</PageTitle>
 
-<h1>Restaurar imagen</h1>
-
-<p>
-    Restaura y amplía imágenes con Real-ESRGAN usando ONNX Runtime Web.
-    El modelo procesa internamente a 4x y ajusta la salida al factor elegido.
-    Todo el procesamiento ocurre en tu navegador: la imagen nunca sale de tu dispositivo.
-</p>
-
-<div class="mb-3" style="max-width: 32rem;">
-    <label class="form-label">Selecciona una imagen</label>
-    <InputFile class="form-control" OnChange="CargarImagen" accept="image/*" />
+<div class="hero">
+    <h1>PhotoRestore</h1>
+    <p class="hero-sub">
+        Restauración de fotos con IA, directamente en tu navegador.
+        Sin servidores: tu imagen nunca sale de tu dispositivo.
+    </p>
 </div>
 
-<div class="mb-3" style="max-width: 32rem;">
-    <label class="form-label" for="factor">Factor de salida</label>
-    <InputSelect id="factor" class="form-select" @bind-Value="factor" disabled="@ocupado">
-        <option value="1">x1 (restaurar, mismo tamaño)</option>
-        <option value="2">x2</option>
-        <option value="4">x4 (máximo detalle)</option>
-    </InputSelect>
+<div class="glass-card anim-enter">
+    <div class="dropzone" @ref="dropzoneRef">
+        <InputFile class="dropzone-input" OnChange="CargarImagen" accept="image/*" title="Selecciona una imagen" />
+        <svg class="dz-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        @if (imagenNombre is not null && imagenBytes is not null)
+        {
+            <p class="dz-file">@imagenNombre</p>
+            <span class="dz-hint">@imagenAncho × @imagenAlto px · haz clic o suelta otra imagen para cambiar</span>
+        }
+        else
+        {
+            <p>Arrastra una imagen o haz clic para seleccionar</p>
+            <span class="dz-hint">PNG, JPG, WebP… hasta 25 MB</span>
+        }
+    </div>
+</div>
+
+<div class="glass-card anim-enter">
+    <span class="card-label">Factor de salida</span>
+    <div class="scale-pills">
+        @foreach (var f in new[] { 1, 2, 4 })
+        {
+            var valor = f;
+            <label class="pill @(factor == valor ? "active" : "") @(ocupado ? "disabled" : "")">
+                <input type="radio" name="factor" value="@valor" checked="@(factor == valor)"
+                       disabled="@ocupado" @onchange="() => factor = valor" />
+                @EtiquetaFactor(valor)
+            </label>
+        }
+    </div>
     @if (imagenAncho > 0)
     {
-        <div class="form-text">Salida: @(imagenAncho * factor) × @(imagenAlto * factor)</div>
+        <p class="output-hint">Salida: <strong>@(imagenAncho * factor) × @(imagenAlto * factor) px</strong></p>
     }
 </div>
 
-<button class="btn btn-primary mb-3" @onclick="Restaurar" disabled="@(imagenBytes is null || ocupado)">
+<button class="btn-restore" @onclick="Restaurar" disabled="@(imagenBytes is null || ocupado)">
     @(ocupado ? "Procesando…" : "Restaurar")
 </button>
 
-@if (!string.IsNullOrEmpty(estado))
+@if (ocupado)
 {
-    <p role="status">@estado</p>
-    @if (tilesTotal > 0)
-    {
-        <div class="progress mb-3" style="max-width: 32rem;">
-            <div class="progress-bar" role="progressbar"
-                 style="width: @(100 * tilesDone / tilesTotal)%"
-                 aria-valuenow="@tilesDone" aria-valuemin="0" aria-valuemax="@tilesTotal"></div>
-        </div>
-    }
-}
-
-@if (!string.IsNullOrEmpty(backend))
-{
-    <p>Motor: <strong>@(backend == "webgpu" ? "WebGPU" : "WASM (CPU)")</strong></p>
-}
-
-@if (!string.IsNullOrEmpty(error))
-{
-    <div class="alert alert-danger" style="max-width: 32rem;">@error</div>
-}
-
-@if (originalUrl is not null || resultUrl is not null)
-{
-    <div class="row">
-        @if (originalUrl is not null)
+    <div class="glass-card processing-card fade-in">
+        <lottie-player src="lottie/loading.json" autoplay loop
+                       style="width: 140px; height: 105px;"></lottie-player>
+        <p class="status-text" role="status">@estado</p>
+        @if (tilesTotal > 0)
         {
-            <div class="col-md-6 mb-3">
-                <h5>Original</h5>
-                <img src="@originalUrl" class="img-fluid border" alt="Imagen original" />
-            </div>
-        }
-        @if (resultUrl is not null)
-        {
-            <div class="col-md-6 mb-3">
-                <h5>Resultado (@resultWidth × @resultHeight)</h5>
-                <img src="@resultUrl" class="img-fluid border" alt="Imagen restaurada" />
-                <div class="mt-2">
-                    <a class="btn btn-success" href="@resultUrl" download="@NombreDescarga">Descargar resultado</a>
-                </div>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: @(100 * tilesDone / tilesTotal)%"></div>
             </div>
         }
     </div>
 }
 
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="glass-card error-card fade-in">@error</div>
+}
+
+@if (resultUrl is not null && originalUrl is not null)
+{
+    <div class="glass-card result-card fade-in">
+        <span class="card-label">Resultado</span>
+        <div class="comparison-wrap">
+            <img-comparison-slider>
+                <img slot="first" src="@originalUrl" alt="Imagen original" />
+                <img slot="second" src="@resultUrl" alt="Imagen restaurada" />
+            </img-comparison-slider>
+            <span class="cmp-label before">Antes</span>
+            <span class="cmp-label after">Después</span>
+        </div>
+        <p class="result-meta">
+            <strong>@resultWidth × @resultHeight px</strong> · x@factor
+            @if (!string.IsNullOrEmpty(backend))
+            {
+                <span class="backend-badge @(backend == "webgpu" ? "webgpu" : "")">
+                    Motor: @(backend == "webgpu" ? "WebGPU" : "WASM (CPU)")
+                </span>
+            }
+        </p>
+        <a class="btn-download" href="@resultUrl" download="@NombreDescarga">Descargar resultado</a>
+    </div>
+}
+
+<footer class="page-footer">
+    Tu imagen nunca sale de tu dispositivo · Real-ESRGAN · ONNX Runtime Web
+</footer>
+
 @code {
     private const long MaxFileSize = 25 * 1024 * 1024; // 25 MB
 
     private IJSObjectReference? module;
+    private IJSObjectReference? uiModule;
     private DotNetObjectReference<Restore>? progressRef;
+    private ElementReference dropzoneRef;
 
     private byte[]? imagenBytes;
     private string? imagenMime;
@@ -107,12 +135,23 @@
     private string NombreDescarga =>
         $"{Path.GetFileNameWithoutExtension(imagenNombre ?? "imagen")}-x{factor}.png";
 
+    private static string EtiquetaFactor(int f) => f switch
+    {
+        1 => "x1 · mismo tamaño",
+        2 => "x2",
+        _ => "x4 · máximo detalle"
+    };
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/upscaler.js");
+            uiModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/ui.js");
             progressRef = DotNetObjectReference.Create(this);
+
+            await uiModule.InvokeVoidAsync("initAnimations");
+            await uiModule.InvokeVoidAsync("initDropzone", dropzoneRef);
         }
     }
 
@@ -123,6 +162,7 @@
         backend = null;
         estado = null;
         imagenBytes = null;
+        imagenNombre = null;
         imagenAncho = 0;
         imagenAlto = 0;
 
@@ -157,6 +197,7 @@
         {
             error = $"No se pudo leer la imagen: {ex.Message}";
             imagenBytes = null;
+            imagenNombre = null;
         }
     }
 
@@ -179,16 +220,15 @@
             backend = result.Backend;
             resultWidth = result.Width;
             resultHeight = result.Height;
-            estado = "Completado.";
         }
         catch (Exception ex)
         {
             error = $"Error durante la restauración: {ex.Message}";
-            estado = null;
         }
         finally
         {
             ocupado = false;
+            estado = null;
         }
     }
 
@@ -204,16 +244,16 @@
     public async ValueTask DisposeAsync()
     {
         progressRef?.Dispose();
-        if (module is not null)
+        try
         {
-            try
-            {
+            if (module is not null)
                 await module.DisposeAsync();
-            }
-            catch (JSDisconnectedException)
-            {
-                // El circuito/JS ya no está disponible al cerrar la página.
-            }
+            if (uiModule is not null)
+                await uiModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // El circuito/JS ya no está disponible al cerrar la página.
         }
     }
 

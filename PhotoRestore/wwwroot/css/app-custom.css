@@ -1,0 +1,394 @@
+/* app-custom.css — Tema oscuro "glass" de PhotoRestore.
+   Se carga después de app.css y Bootstrap: neutraliza los restos del tema claro
+   de la plantilla donde chocan con el tema oscuro. */
+
+:root {
+    --bg: #0b0f17;
+    --bg-soft: #111827;
+    --surface: rgba(255, 255, 255, 0.045);
+    --surface-strong: rgba(255, 255, 255, 0.08);
+    --border: rgba(255, 255, 255, 0.09);
+    --text: #e6edf3;
+    --text-muted: #93a1b3;
+    --accent-a: #8b5cf6;  /* violeta */
+    --accent-b: #22d3ee;  /* cian */
+    --accent-gradient: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+    --danger: #f87171;
+    --radius: 16px;
+    --shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+body {
+    background:
+        radial-gradient(60rem 30rem at 85% -10%, rgba(139, 92, 246, 0.16), transparent 60%),
+        radial-gradient(50rem 26rem at -10% 110%, rgba(34, 211, 238, 0.12), transparent 60%),
+        var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5 {
+    font-family: 'Sora', 'Inter', sans-serif;
+}
+
+a {
+    color: var(--accent-b);
+}
+
+/* ---------- Hero ---------- */
+
+.hero {
+    text-align: center;
+    margin: 2.5rem 0 2rem;
+}
+
+.hero h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 700;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 0.5rem;
+}
+
+.hero .hero-sub {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    max-width: 34rem;
+    margin: 0 auto;
+}
+
+/* ---------- Tarjetas de cristal ---------- */
+
+.glass-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+}
+
+.card-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+/* Aparición de tarjetas que Blazor muestra condicionalmente (sin GSAP). */
+.fade-in {
+    animation: fadeSlideIn 0.45s ease both;
+}
+
+@keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- Dropzone ---------- */
+
+.dropzone {
+    position: relative;
+    border: 2px dashed rgba(255, 255, 255, 0.22);
+    border-radius: 12px;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+    transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+/* El input cubre toda la zona: el clic funciona de forma nativa. */
+.dropzone .dropzone-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    padding: 0;
+}
+
+.dropzone:hover,
+.dropzone.drag-over {
+    border-color: var(--accent-b);
+    background: rgba(34, 211, 238, 0.06);
+}
+
+.dropzone.drag-over {
+    transform: scale(1.01);
+}
+
+.dropzone .dz-icon {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 0.75rem;
+    stroke: var(--accent-b);
+}
+
+.dropzone p {
+    margin: 0;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.dropzone .dz-hint {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 0.85rem;
+}
+
+.dropzone .dz-file {
+    color: var(--accent-b);
+}
+
+/* ---------- Selector de factor (pills) ---------- */
+
+.scale-pills {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.scale-pills .pill {
+    position: relative;
+    padding: 0.5rem 1.15rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+.scale-pills .pill input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.scale-pills .pill:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    color: var(--text);
+}
+
+.scale-pills .pill.active {
+    background: var(--accent-gradient);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 18px rgba(139, 92, 246, 0.4);
+}
+
+.scale-pills .pill.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.output-hint {
+    margin: 0.85rem 0 0;
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.output-hint strong {
+    color: var(--text);
+}
+
+/* ---------- Botón principal ---------- */
+
+.btn-restore {
+    display: block;
+    width: 100%;
+    padding: 0.95rem;
+    border: none;
+    border-radius: 14px;
+    background: var(--accent-gradient);
+    color: #fff;
+    font-family: 'Sora', 'Inter', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    box-shadow: 0 8px 28px rgba(139, 92, 246, 0.35);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+    margin-bottom: 1.25rem;
+}
+
+.btn-restore:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 34px rgba(34, 211, 238, 0.35);
+    filter: brightness(1.08);
+}
+
+.btn-restore:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.btn-restore:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* ---------- Procesando ---------- */
+
+.processing-card {
+    text-align: center;
+}
+
+.processing-card lottie-player {
+    margin: 0 auto 0.5rem;
+}
+
+.processing-card .status-text {
+    font-weight: 500;
+    margin-bottom: 1rem;
+}
+
+.progress-track {
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: var(--accent-gradient);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+    transition: width 0.25s ease;
+}
+
+@keyframes shimmer {
+    from { background-position: 0% 0; }
+    to   { background-position: 200% 0; }
+}
+
+/* ---------- Badge del motor ---------- */
+
+.backend-badge {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.3rem 0.9rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--surface-strong);
+    color: var(--text-muted);
+}
+
+.backend-badge.webgpu {
+    color: var(--accent-b);
+    border-color: rgba(34, 211, 238, 0.4);
+}
+
+/* ---------- Error ---------- */
+
+.error-card {
+    border-color: rgba(248, 113, 113, 0.4);
+    color: var(--danger);
+    font-weight: 500;
+}
+
+/* ---------- Resultado / comparación ---------- */
+
+.comparison-wrap {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.comparison-wrap img-comparison-slider {
+    display: block;
+    width: 100%;
+    --divider-width: 2px;
+    --divider-color: #fff;
+    --default-handle-color: #fff;
+    --default-handle-opacity: 0.95;
+}
+
+.comparison-wrap img {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.cmp-label {
+    position: absolute;
+    top: 0.75rem;
+    z-index: 2;
+    padding: 0.2rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    backdrop-filter: blur(6px);
+    pointer-events: none;
+}
+
+.cmp-label.before { left: 0.75rem; }
+.cmp-label.after  { right: 0.75rem; background: rgba(139, 92, 246, 0.65); }
+
+.result-meta {
+    margin: 1rem 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.result-meta strong {
+    color: var(--text);
+}
+
+.btn-download {
+    display: inline-block;
+    padding: 0.8rem 2rem;
+    border-radius: 12px;
+    background: var(--accent-gradient);
+    color: #fff !important;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: 0 8px 28px rgba(139, 92, 246, 0.35);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.btn-download:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+    box-shadow: 0 12px 34px rgba(34, 211, 238, 0.35);
+}
+
+/* ---------- Pie ---------- */
+
+.page-footer {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    padding: 2rem 0 1rem;
+}
+
+/* ---------- Neutralizar restos del tema claro ---------- */
+
+#blazor-error-ui {
+    color-scheme: dark;
+    background: #3b1215;
+    color: #fecaca;
+}
+
+::selection {
+    background: rgba(139, 92, 246, 0.5);
+}
