@@ -24,8 +24,16 @@
         </svg>
         @if (imagenNombre is not null && imagenBytes is not null)
         {
-            <p class="dz-file">@imagenNombre</p>
-            <span class="dz-hint">@imagenAncho × @imagenAlto px · haz clic o suelta otra imagen para cambiar</span>
+            <div class="dz-preview fade-in">
+                @if (originalUrl is not null)
+                {
+                    <img class="dz-thumb" src="@originalUrl" alt="Vista previa de la imagen seleccionada" />
+                }
+                <div class="dz-info">
+                    <p class="dz-file">@imagenNombre</p>
+                    <span class="dz-hint">@imagenAncho × @imagenAlto px · haz clic o suelta otra imagen para cambiar</span>
+                </div>
+            </div>
         }
         else
         {
@@ -345,7 +353,11 @@ else
         try
         {
             if (module is not null)
+            {
+                if (originalUrl is not null)
+                    await module.InvokeVoidAsync("revokeObjectUrl", originalUrl);
                 await module.DisposeAsync();
+            }
             if (faceModule is not null)
                 await faceModule.DisposeAsync();
             if (uiModule is not null)
