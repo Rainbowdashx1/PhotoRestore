@@ -8,52 +8,35 @@
 //   3. AB reescalado (bilineal, float) al tamaño original; L original + AB
 //      → Lab → RGB → PNG.
 // La luminancia nunca baja de resolución: solo la croma pasa por el modelo.
-// Mismo patrón de carga que upscaler.js/face-restore.js: fetch manual con
-// validación y reintento, sesión en caché, fallback WebGPU → WASM también ante
-// fallos en la primera inferencia.
+// La carga del modelo usa ModelLoader (js/model-loader.js): caché en memoria y
+// Cache Storage (disco del usuario), ./models/ servido por la web o, si no está,
+// descarga desde una URL remota de respaldo. Sesión en caché y fallback WebGPU
+// → WASM también ante fallos en la primera inferencia.
 
 const MODEL_URL = './models/ddcolor.onnx';
+// TODO: ddcolor.onnx es un exporte propio (ver models/README.md); para que la
+// colorización funcione en despliegues estáticos hay que subirlo a un repo
+// público de HuggingFace y poner aquí la URL resolve/…/ddcolor.onnx.
+const MODEL_REMOTE_URL = null;
 const MODEL_MIN_BYTES = 100_000_000; // real: 270.255.132 bytes (fp32)
 const INPUT_SIZE = 512;              // entrada fija del export: [1,3,512,512]
 
 let session = null;
 let backend = null;
-let modelBytes = null;   // cache para no redescargar al reintentar
 let forceWasm = false;
 
 function webGpuSupported() {
     return typeof navigator !== 'undefined' && 'gpu' in navigator;
 }
 
-async function fetchModel() {
-    if (modelBytes) return modelBytes;
-    let lastError = null;
-    for (let intento = 1; intento <= 2; intento++) {
-        try {
-            console.log(`Descargando modelo DDColor (intento ${intento})…`);
-            const resp = await fetch(MODEL_URL, { cache: 'no-cache' });
-            if (!resp.ok)
-                throw new Error(`Error del servidor al descargar el modelo: HTTP ${resp.status}`);
-            const buffer = await resp.arrayBuffer();
-            if (buffer.byteLength < MODEL_MIN_BYTES)
-                throw new Error(`El modelo descargado parece incompleto (${buffer.byteLength} bytes); recarga la página e inténtalo de nuevo.`);
-            modelBytes = new Uint8Array(buffer);
-            return modelBytes;
-        } catch (err) {
-            lastError = err;
-            console.warn(`Fallo al descargar el modelo (intento ${intento}).`, err);
-            if (intento < 2)
-                await new Promise(r => setTimeout(r, 800));
-        }
-    }
-    if (lastError instanceof TypeError)
-        throw new Error(`No se pudo descargar el modelo (¿el servidor sigue corriendo?): ${lastError.message}`);
-    throw lastError;
-}
-
-async function getSession() {
+async function getSession(onProgreso = null) {
     if (session) return session;
-    const bytes = await fetchModel();
+    const bytes = await ModelLoader.cargarModelo({
+        url: MODEL_URL,
+        remoteUrl: MODEL_REMOTE_URL,
+        minBytes: MODEL_MIN_BYTES,
+        onProgreso
+    });
     const providers = (!forceWasm && webGpuSupported()) ? ['webgpu', 'wasm'] : ['wasm'];
     let lastError = null;
     for (const ep of providers) {
@@ -153,7 +136,12 @@ export async function colorize(bytes, mimeType, progressHelper) {
 }
 
 async function colorizeInterno(bytes, mimeType, progressHelper) {
-    const sess = await getSession();
+    const onProgreso = progressHelper
+        ? p => progressHelper.invokeMethodAsync('OnEstado', p < 0
+            ? 'Descargando modelo de colorización (solo la primera vez)…'
+            : `Descargando modelo de colorización (solo la primera vez)… ${p}%`)
+        : null;
+    const sess = await getSession(onProgreso);
 
     const bitmap = await createImageBitmap(new Blob([bytes], { type: mimeType }));
     const w = bitmap.width, h = bitmap.height;

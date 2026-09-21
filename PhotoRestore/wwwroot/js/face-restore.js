@@ -2,8 +2,9 @@
 // Pipeline: detección de caras (SCRFD 2.5G, con 5 puntos faciales) → alineado
 // de cada cara a 512×512 (transformación de semejanza a la plantilla ArcFace)
 // → restauración con GFPGAN → pegado en la foto original con máscara suave.
-// Mismo patrón que upscaler.js: descarga manual del modelo con validación y un
-// reintento, sesiones en caché y fallback explícito WebGPU → WASM.
+// La carga de modelos usa ModelLoader (js/model-loader.js): caché en memoria y
+// Cache Storage (disco del usuario), ./models/ servido por la web o, si no está,
+// descarga desde HuggingFace. Sesiones en caché y fallback explícito WebGPU → WASM.
 //
 // Fallback robusto: la creación de sesión puede ir bien en WebGPU pero fallar
 // un op en la PRIMERA inferencia (p. ej. shape computation no soportada). Por
@@ -15,6 +16,14 @@ const DETECTOR_URL = './models/scrfd-2.5g.onnx';
 const GFPGAN_URL = './models/gfpgan-v1.4.onnx';
 const DETECTOR_MIN_BYTES = 1_000_000;   // real: 3.291.737 bytes
 const GFPGAN_MIN_BYTES = 100_000_000;   // real: ~340 MB (fp32)
+
+// Respaldo remoto (HuggingFace) para despliegues estáticos sin los .onnx
+// grandes en el servidor (Azure Static Web Apps). El detector NO tiene
+// respaldo remoto: el original de HF tiene ceil_mode=1 y rompe WebGPU; el
+// nuestro está parcheado (ver models/README.md) y viaja en el repo.
+const REMOTE_URLS = new Map([
+    [GFPGAN_URL, 'https://huggingface.co/HowToSD/GFPGAN-ONNX/resolve/main/GFPGANv1.4.onnx']
+]);
 
 const DET_SIZE = 640;   // entrada del detector SCRFD
 const FACE_SIZE = 512;  // entrada/salida de GFPGAN
@@ -34,45 +43,24 @@ const PLANTILLA_512 = [
 
 const sessions = new Map();   // url -> InferenceSession
 const backends = new Map();   // url -> 'webgpu' | 'wasm'
-const modelCache = new Map(); // url -> Uint8Array (evita redescargar al reintentar)
 let forceWasm = false;        // se activa si WebGPU falla en la primera inferencia
 
 function webGpuSupported() {
     return typeof navigator !== 'undefined' && 'gpu' in navigator;
 }
 
-// Descarga un modelo con un reintento y mensajes de error autoexplicativos.
-async function fetchModel(url, minBytes) {
-    if (modelCache.has(url)) return modelCache.get(url);
-    let lastError = null;
-    for (let intento = 1; intento <= 2; intento++) {
-        try {
-            console.log(`Descargando ${url} (intento ${intento})…`);
-            const resp = await fetch(url, { cache: 'no-cache' });
-            if (!resp.ok)
-                throw new Error(`Error del servidor al descargar el modelo: HTTP ${resp.status}`);
-            const buffer = await resp.arrayBuffer();
-            if (buffer.byteLength < minBytes)
-                throw new Error(`El modelo descargado parece incompleto (${buffer.byteLength} bytes); recarga la página e inténtalo de nuevo.`);
-            const bytes = new Uint8Array(buffer);
-            modelCache.set(url, bytes);
-            return bytes;
-        } catch (err) {
-            lastError = err;
-            console.warn(`Fallo al descargar ${url} (intento ${intento}).`, err);
-            if (intento < 2)
-                await new Promise(r => setTimeout(r, 800));
-        }
-    }
-    if (lastError instanceof TypeError) // error de red de fetch
-        throw new Error(`No se pudo descargar el modelo (¿el servidor sigue corriendo?): ${lastError.message}`);
-    throw lastError;
+// Descarga un modelo vía ModelLoader (caché persistente + respaldo remoto).
+async function fetchModel(url, minBytes, onProgreso = null) {
+    return ModelLoader.cargarModelo({
+        url, minBytes, onProgreso,
+        remoteUrl: REMOTE_URLS.get(url) ?? null
+    });
 }
 
 // Sesión en caché por modelo, creada desde bytes; WebGPU con caída a WASM (CPU).
-async function getSession(url, minBytes) {
+async function getSession(url, minBytes, onProgreso = null) {
     if (sessions.has(url)) return sessions.get(url);
-    const modelBytes = await fetchModel(url, minBytes);
+    const modelBytes = await fetchModel(url, minBytes, onProgreso);
     const providers = (!forceWasm && webGpuSupported()) ? ['webgpu', 'wasm'] : ['wasm'];
     let lastError = null;
     for (const ep of providers) {
@@ -311,7 +299,12 @@ export async function restoreFaces(bytes, mimeType, progressHelper) {
 
 async function restoreFacesInterno(bytes, mimeType, progressHelper) {
     const detSess = await getSession(DETECTOR_URL, DETECTOR_MIN_BYTES);
-    const ganSess = await getSession(GFPGAN_URL, GFPGAN_MIN_BYTES);
+    const onProgreso = progressHelper
+        ? p => progressHelper.invokeMethodAsync('OnEstado', p < 0
+            ? 'Descargando modelo de restauración de caras (solo la primera vez)…'
+            : `Descargando modelo de restauración de caras (solo la primera vez)… ${p}%`)
+        : null;
+    const ganSess = await getSession(GFPGAN_URL, GFPGAN_MIN_BYTES, onProgreso);
 
     const bitmap = await createImageBitmap(new Blob([bytes], { type: mimeType }));
     const w = bitmap.width, h = bitmap.height;
