@@ -45,16 +45,54 @@
 
 <div class="glass-card anim-enter">
     <span class="card-label">Modo de restauración</span>
-    <div class="scale-pills">
-        <label class="pill @(modo == "general" ? "active" : "") @(ocupado ? "disabled" : "")">
+    <div class="mode-cards">
+        <label class="mode-card @(modo == "general" ? "active" : "") @(ocupado ? "disabled" : "")">
             <input type="radio" name="modo" value="general" checked="@(modo == "general")"
                    disabled="@ocupado" @onchange='() => modo = "general"' />
-            General · Real-ESRGAN (mejora y amplía)
+            <div class="mode-head">
+                <span class="mode-title">General</span>
+                <span class="mode-model">Real-ESRGAN</span>
+            </div>
+            <p class="mode-desc">
+                Mejora la nitidez y aumenta la resolución (hasta x4).
+                Úsalo para fotos pixeladas, comprimidas o de baja calidad.
+            </p>
         </label>
-        <label class="pill @(modo == "caras" ? "active" : "") @(ocupado ? "disabled" : "")">
+        <label class="mode-card @(modo == "caras" ? "active" : "") @(ocupado ? "disabled" : "")">
             <input type="radio" name="modo" value="caras" checked="@(modo == "caras")"
                    disabled="@ocupado" @onchange='() => modo = "caras"' />
-            Caras · GFPGAN (fotos antiguas, rostros)
+            <div class="mode-head">
+                <span class="mode-title">Caras</span>
+                <span class="mode-model">GFPGAN</span>
+            </div>
+            <p class="mode-desc">
+                Restaura rostros dañados o desenfocados.
+                Ideal para fotos antiguas y retratos; mantiene el tamaño original.
+            </p>
+        </label>
+        <label class="mode-card @(modo == "colorizar" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="colorizar" checked="@(modo == "colorizar")"
+                   disabled="@ocupado" @onchange='() => modo = "colorizar"' />
+            <div class="mode-head">
+                <span class="mode-title">Colorizar</span>
+                <span class="mode-model">DDColor</span>
+            </div>
+            <p class="mode-desc">
+                Da color a fotos en blanco y negro, manteniendo el tamaño original.
+                Úsalo solo con imágenes en escala de grises.
+            </p>
+        </label>
+        <label class="mode-card @(modo == "fondo" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="fondo" checked="@(modo == "fondo")"
+                   disabled="@ocupado" @onchange='() => modo = "fondo"' />
+            <div class="mode-head">
+                <span class="mode-title">Quitar fondo</span>
+                <span class="mode-model">RMBG-1.4</span>
+            </div>
+            <p class="mode-desc">
+                Detecta el sujeto principal y elimina el fondo automáticamente.
+                Devuelve un PNG con transparencia, en el tamaño original.
+            </p>
         </label>
     </div>
 </div>
@@ -78,13 +116,6 @@
         {
             <p class="output-hint">Salida: <strong>@(imagenAncho * factor) × @(imagenAlto * factor) px</strong></p>
         }
-    </div>
-}
-else
-{
-    <div class="glass-card">
-        <span class="card-label">Factor de salida</span>
-        <p class="output-hint" style="margin-top: 0;">Las caras se restauran en su tamaño original; la foto mantiene sus dimensiones.</p>
     </div>
 }
 
@@ -150,7 +181,7 @@ else
 }
 
 <footer class="page-footer">
-    Tu imagen nunca sale de tu dispositivo · Real-ESRGAN · ONNX Runtime Web
+    Tu imagen nunca sale de tu dispositivo · Real-ESRGAN · GFPGAN · DDColor · RMBG-1.4 · ONNX Runtime Web
 </footer>
 
 @code {
@@ -158,6 +189,8 @@ else
 
     private IJSObjectReference? module;
     private IJSObjectReference? faceModule;
+    private IJSObjectReference? colorModule;
+    private IJSObjectReference? bgModule;
     private IJSObjectReference? uiModule;
     private DotNetObjectReference<Restore>? progressRef;
     private ElementReference dropzoneRef;
@@ -169,7 +202,7 @@ else
     private string? imagenNombre;
     private int imagenAncho;
     private int imagenAlto;
-    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN)
+    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN) | "colorizar" (DDColor) | "fondo" (RMBG-1.4)
     private int factor = 1;
     private string? originalUrl;
     private string? resultUrl;
@@ -186,7 +219,13 @@ else
     private string NombreDescarga =>
         $"{Path.GetFileNameWithoutExtension(imagenNombre ?? "imagen")}-{SufijoDescarga}.png";
 
-    private string SufijoDescarga => modo == "caras" ? "caras" : $"x{factor}";
+    private string SufijoDescarga => modo switch
+    {
+        "caras" => "caras",
+        "colorizar" => "color",
+        "fondo" => "sin-fondo",
+        _ => $"x{factor}"
+    };
 
     private static string EtiquetaFactor(int f) => f switch
     {
@@ -201,6 +240,8 @@ else
         {
             module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/upscaler.js");
             faceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/face-restore.js");
+            colorModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/colorize.js");
+            bgModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/remove-bg.js");
             uiModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/ui.js");
             progressRef = DotNetObjectReference.Create(this);
 
@@ -281,6 +322,30 @@ else
             {
                 await RestaurarCaras();
             }
+            else if (modo == "fondo")
+            {
+                if (bgModule is null) return;
+                estado = "Cargando modelo RMBG-1.4 (~168 MB la primera vez)…";
+                var result = await bgModule.InvokeAsync<UpscaleResult>("removeBackground", imagenBytes, imagenMime, progressRef);
+                resultUrl = result.ResultUrl;
+                backend = result.Backend;
+                resultWidth = result.Width;
+                resultHeight = result.Height;
+                info = "Fondo eliminado. El PNG descargado conserva la transparencia.";
+                hintPendiente = true;
+            }
+            else if (modo == "colorizar")
+            {
+                if (colorModule is null) return;
+                estado = "Cargando modelo DDColor (~258 MB la primera vez)…";
+                var result = await colorModule.InvokeAsync<UpscaleResult>("colorize", imagenBytes, imagenMime, progressRef);
+                resultUrl = result.ResultUrl;
+                backend = result.Backend;
+                resultWidth = result.Width;
+                resultHeight = result.Height;
+                info = "Foto colorizada. La luminancia se conserva; el color es una estimación del modelo.";
+                hintPendiente = true;
+            }
             else
             {
                 if (module is null) return;
@@ -360,6 +425,10 @@ else
             }
             if (faceModule is not null)
                 await faceModule.DisposeAsync();
+            if (colorModule is not null)
+                await colorModule.DisposeAsync();
+            if (bgModule is not null)
+                await bgModule.DisposeAsync();
             if (uiModule is not null)
                 await uiModule.DisposeAsync();
         }
