@@ -9,3 +9,4 @@ obj/
 # prototipo para que funcione tal cual; si el modelo creciera, convendría
 # excluirlo de git y alojarlo aparte.
 /.vs/PhotoRestore.slnx
+/.vs/PhotoRestore/CopilotIndices/18.11.979.32481
