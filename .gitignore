@@ -8,3 +8,4 @@ obj/
 # Nota: PhotoRestore/wwwroot/models/realesrgan-x4.onnx (~5 MB) se incluye en el
 # prototipo para que funcione tal cual; si el modelo creciera, convendría
 # excluirlo de git y alojarlo aparte.
+/.vs/PhotoRestore.slnx

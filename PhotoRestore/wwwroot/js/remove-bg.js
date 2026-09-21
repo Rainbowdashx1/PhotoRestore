@@ -1,0 +1,180 @@
+// remove-bg.js — Eliminación de fondo con RMBG-1.4 (BRIA AI, IS-Net).
+// Réplica del pipeline oficial (briaai/RMBG-1.4, ejemplo ONNX del model card):
+//   1. Reducir la imagen a la entrada fija del modelo (1024×1024, estirando),
+//      normalizar: x/255 - 0.5 (mean 0.5, std 1.0).
+//   2. Inferencia → máscara de logits [1,1,1024,1024].
+//   3. Máscara reescalada (bilineal, float) al tamaño original y normalizada
+//      min-max a [0,1] → canal alpha. El color nunca pasa por el modelo:
+//      el RGB de salida es el de la imagen original a resolución completa.
+// Mismo patrón de carga que upscaler.js/colorize.js: fetch manual con
+// validación y reintento, sesión en caché, fallback WebGPU → WASM también ante
+// fallos en la primera inferencia.
+
+const MODEL_URL = './models/rmbg-1.4.onnx';
+const MODEL_MIN_BYTES = 170_000_000; // real: ~176 MB (fp32)
+const INPUT_SIZE = 1024;             // entrada fija: [1,3,1024,1024]
+
+let session = null;
+let backend = null;
+let modelBytes = null;   // cache para no redescargar al reintentar
+let forceWasm = false;
+
+function webGpuSupported() {
+    return typeof navigator !== 'undefined' && 'gpu' in navigator;
+}
+
+async function fetchModel() {
+    if (modelBytes) return modelBytes;
+    let lastError = null;
+    for (let intento = 1; intento <= 2; intento++) {
+        try {
+            console.log(`Descargando modelo RMBG-1.4 (intento ${intento})…`);
+            const resp = await fetch(MODEL_URL, { cache: 'no-cache' });
+            if (!resp.ok)
+                throw new Error(`Error del servidor al descargar el modelo: HTTP ${resp.status}`);
+            const buffer = await resp.arrayBuffer();
+            if (buffer.byteLength < MODEL_MIN_BYTES)
+                throw new Error(`El modelo descargado parece incompleto (${buffer.byteLength} bytes); recarga la página e inténtalo de nuevo.`);
+            modelBytes = new Uint8Array(buffer);
+            return modelBytes;
+        } catch (err) {
+            lastError = err;
+            console.warn(`Fallo al descargar el modelo (intento ${intento}).`, err);
+            if (intento < 2)
+                await new Promise(r => setTimeout(r, 800));
+        }
+    }
+    if (lastError instanceof TypeError)
+        throw new Error(`No se pudo descargar el modelo (¿el servidor sigue corriendo?): ${lastError.message}`);
+    throw lastError;
+}
+
+async function getSession() {
+    if (session) return session;
+    const bytes = await fetchModel();
+    const providers = (!forceWasm && webGpuSupported()) ? ['webgpu', 'wasm'] : ['wasm'];
+    let lastError = null;
+    for (const ep of providers) {
+        try {
+            session = await ort.InferenceSession.create(bytes, {
+                executionProviders: [ep],
+                graphOptimizationLevel: 'all'
+            });
+            backend = ep;
+            return session;
+        } catch (err) {
+            lastError = err;
+        }
+    }
+    throw lastError;
+}
+
+// Reescalado bilineal de un canal float (más preciso que pasar por canvas 8-bit).
+function resizeBilinear(src, sw, sh, dw, dh) {
+    const dst = new Float32Array(dw * dh);
+    const rx = sw / dw, ry = sh / dh;
+    for (let y = 0; y < dh; y++) {
+        const sy = (y + 0.5) * ry - 0.5;
+        const y0 = Math.max(0, Math.floor(sy)), y1 = Math.min(sh - 1, y0 + 1);
+        const fy = Math.min(Math.max(sy - y0, 0), 1);
+        for (let x = 0; x < dw; x++) {
+            const sx = (x + 0.5) * rx - 0.5;
+            const x0 = Math.max(0, Math.floor(sx)), x1 = Math.min(sw - 1, x0 + 1);
+            const fx = Math.min(Math.max(sx - x0, 0), 1);
+            const v00 = src[y0 * sw + x0], v10 = src[y0 * sw + x1];
+            const v01 = src[y1 * sw + x0], v11 = src[y1 * sw + x1];
+            dst[y * dw + x] = (v00 * (1 - fx) + v10 * fx) * (1 - fy) +
+                              (v01 * (1 - fx) + v11 * fx) * fy;
+        }
+    }
+    return dst;
+}
+
+// ---------------- Punto de entrada ----------------
+
+// Quita el fondo manteniendo el tamaño original; devuelve PNG con transparencia.
+// progressHelper (DotNetObjectReference): OnEstado(string) para la fase.
+// Devuelve { resultUrl, backend, width, height }.
+export async function removeBackground(bytes, mimeType, progressHelper) {
+    try {
+        return await removeBackgroundInterno(bytes, mimeType, progressHelper);
+    } catch (err) {
+        // La sesión WebGPU puede crearse bien pero fallar en la primera
+        // inferencia: se libera y se reintenta todo con WASM (CPU).
+        if (forceWasm || backend !== 'webgpu') throw err;
+        console.warn('WebGPU falló durante la inferencia; reintentando con WASM (CPU).', err);
+        forceWasm = true;
+        try { await session?.release?.(); } catch { /* mejor esfuerzo */ }
+        session = null;
+        backend = null;
+        try {
+            return await removeBackgroundInterno(bytes, mimeType, progressHelper);
+        } catch (errWasm) {
+            throw new Error(`Falló WebGPU (${err.message}) y también WASM (${errWasm.message})`);
+        }
+    }
+}
+
+async function removeBackgroundInterno(bytes, mimeType, progressHelper) {
+    const sess = await getSession();
+
+    const bitmap = await createImageBitmap(new Blob([bytes], { type: mimeType }));
+    const w = bitmap.width, h = bitmap.height;
+
+    // Entrada del modelo: RGB estirado a 1024×1024, normalizado x/255 - 0.5
+    // (mean [0.5,0.5,0.5], std [1,1,1], como el pipeline oficial).
+    const S = INPUT_SIZE;
+    const small = new OffscreenCanvas(S, S);
+    const smallCtx = small.getContext('2d', { willReadFrequently: true });
+    smallCtx.imageSmoothingEnabled = true;
+    smallCtx.imageSmoothingQuality = 'high';
+    smallCtx.drawImage(bitmap, 0, 0, S, S);
+    const smallData = smallCtx.getImageData(0, 0, S, S).data;
+
+    const ns = S * S;
+    const chw = new Float32Array(3 * ns);
+    for (let i = 0; i < ns; i++) {
+        chw[i] = smallData[i * 4] / 255 - 0.5;
+        chw[ns + i] = smallData[i * 4 + 1] / 255 - 0.5;
+        chw[2 * ns + i] = smallData[i * 4 + 2] / 255 - 0.5;
+    }
+
+    if (progressHelper)
+        await progressHelper.invokeMethodAsync('OnEstado', 'Detectando el sujeto…');
+    const res = await sess.run({
+        [sess.inputNames[0]]: new ort.Tensor('float32', chw, [1, 3, S, S])
+    });
+    const logits = res[sess.outputNames[0]].data; // [1, 1, S, S]
+
+    // Máscara a resolución original (bilineal float) + min-max, como el
+    // postprocesado oficial: (x - min) / (max - min).
+    const mask = resizeBilinear(logits, S, S, w, h);
+    let mi = Infinity, ma = -Infinity;
+    for (let i = 0; i < mask.length; i++) {
+        if (mask[i] < mi) mi = mask[i];
+        if (mask[i] > ma) ma = mask[i];
+    }
+    const rango = ma - mi;
+
+    // RGB original a resolución completa + alpha de la máscara.
+    const src = new OffscreenCanvas(w, h);
+    const srcCtx = src.getContext('2d', { willReadFrequently: true });
+    srcCtx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const outImg = srcCtx.getImageData(0, 0, w, h);
+    const n = w * h;
+    for (let i = 0; i < n; i++) {
+        const a = rango > 0 ? (mask[i] - mi) / rango : 0;
+        outImg.data[i * 4 + 3] = Math.round(a * 255);
+    }
+
+    const out = new OffscreenCanvas(w, h);
+    out.getContext('2d').putImageData(outImg, 0, 0);
+    const blob = await out.convertToBlob({ type: 'image/png' });
+    return {
+        resultUrl: URL.createObjectURL(blob),
+        backend,
+        width: w,
+        height: h
+    };
+}
