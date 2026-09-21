@@ -14,10 +14,10 @@
 // → WASM también ante fallos en la primera inferencia.
 
 const MODEL_URL = './models/ddcolor.onnx';
-// TODO: ddcolor.onnx es un exporte propio (ver models/README.md); para que la
-// colorización funcione en despliegues estáticos hay que subirlo a un repo
-// público de HuggingFace y poner aquí la URL resolve/…/ddcolor.onnx.
-const MODEL_REMOTE_URL = null;
+// Respaldo remoto (HuggingFace): ddcolor.onnx es un exporte propio
+// (ver models/README.md) alojado en un repo del proyecto para que la
+// colorización funcione en despliegues estáticos (Azure Static Web Apps).
+const MODEL_REMOTE_URL = 'https://huggingface.co/RainBowDashX/photorestore-ddcolor/resolve/main/ddcolor.onnx';
 const MODEL_MIN_BYTES = 100_000_000; // real: 270.255.132 bytes (fp32)
 const INPUT_SIZE = 512;              // entrada fija del export: [1,3,512,512]
 

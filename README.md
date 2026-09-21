@@ -38,7 +38,7 @@ Blazor WASM (UI) ──JS interop──> módulos ES en wwwroot/js ──> ONNX 
 ```
 
 - **La inferencia es JavaScript, no .NET.** Blazor solo maneja UI y orquesta vía `IJSRuntime`.
-- Cada modo tiene su módulo ES con su propio pipeline; los modelos se cargan una vez y se cachean en memoria.
+- Cada modo tiene su módulo ES con su propio pipeline; los modelos se cargan una vez y se cachean en memoria y en Cache Storage (persistente entre visitas).
 
 ### Estructura
 
@@ -48,6 +48,7 @@ PhotoRestore/
 ├── Layout/MainLayout.razor    # Layout mínimo sin barra lateral
 ├── wwwroot/
 │   ├── js/
+│   │   ├── model-loader.js    # Carga de modelos: memoria → Cache Storage → local → HuggingFace
 │   │   ├── upscaler.js        # Real-ESRGAN: tiles 128px + solape, reescalado x1/x2/x4
 │   │   ├── face-restore.js    # SCRFD (detecta) → alineado ArcFace → GFPGAN → pegado suave
 │   │   ├── colorize.js        # DDColor: RGB→Lab, modelo a 512², AB reescalado, Lab→RGB
@@ -63,7 +64,7 @@ PhotoRestore/
 ## Decisiones técnicas clave
 
 - **WebGPU con fallback WASM explícito**: si cualquier parte de la pipeline falla en WebGPU (no solo la creación de sesión, también la primera inferencia), se liberan las sesiones y se reintenta todo en WASM sin redescargar el modelo. La UI muestra qué motor se usó.
-- **Carga de modelo manual**: el `.onnx` se descarga con `fetch` propio (`no-cache`, validación de tamaño, 1 reintento) y la sesión se crea desde bytes. Esto convirtió el críptico "Failed to fetch" en mensajes diagnósticos claros.
+- **Carga de modelos con caché persistente**: `js/model-loader.js` busca cada `.onnx` en memoria → Cache Storage (disco del usuario) → `./models/` servido por la web → respaldo remoto en HuggingFace, con validación de tamaño, reintento y progreso en la UI. La descarga grande ocurre una sola vez por navegador; la sesión ONNX se crea desde bytes.
 - **Modelos en fp32, no fp16**: el backend WASM/CPU de onnxruntime-web no tiene kernels fp16 para Conv; fp16 rompería el fallback.
 - **SCRFD parcheado** (`ceil_mode` 1→0 en 3 AveragePool): el EP WebGPU no soporta `ceil()` en shape computation. Verificado bit a bit idéntico (diff = 0.0).
 - **Scores SCRFD**: el grafo ya incluye los `Sigmoid` — no aplicar sigmoide de nuevo en JS.
@@ -82,7 +83,7 @@ Lo que nunca se pudo probar automatizado (sin navegador automatizable en el ento
 
 - **HTTPS obligatorio**: WebGPU requiere contexto seguro (localhost ya lo es). GitHub Pages / Cloudflare Pages sirven Blazor WASM standalone gratis.
 - **Autoalojar los CDNs**: onnxruntime-web, GSAP, lottie-player e img-comparison-slider se cargan de jsdelivr con versión fijada; en producción conviene copiarlos a `wwwroot/lib/` (hay comentarios en `index.html`).
-- **Modelos grandes** (GFPGAN 340 MB, DDColor 258 MB, RMBG 176 MB): GFPGAN y RMBG están en `.gitignore` con URL de descarga documentada en `wwwroot/models/README.md`; DDColor está commiteado. Servir con compresión Brotli y cache agresivo (Cache API / IndexedDB para no redescargar).
+- **Modelos grandes** (GFPGAN 340 MB, DDColor 258 MB, RMBG 176 MB): están en `.gitignore` y no se despliegan con la web; el navegador los descarga una sola vez desde HuggingFace y los guarda en Cache Storage (ver `js/model-loader.js`). GFPGAN y RMBG se descargan de sus repos oficiales; DDColor es un **exporte ONNX propio** alojado en https://huggingface.co/RainBowDashX/photorestore-ddcolor — ese repo solo hospeda el archivo convertido (el oficial de piddnad solo publica los pesos PyTorch, y los exports ONNX públicos existentes no son compatibles: ver `wwwroot/models/README.md`): **el modelo DDColor-tiny es de piddnad** (https://huggingface.co/piddnad/ddcolor_paper_tiny, https://github.com/piddnad/DDColor, ICCV 2023, Apache-2.0). Para regenerar el export: `tools/export_ddcolor.py`.
 - **Licencias**: revisar antes de uso comercial — **RMBG-1.4 es solo para uso no comercial** (licencia bria-rmbg-1.4; alternativa Apache 2.0: U²-Net); GFPGAN arrastra componentes de terceros con posible restricción comercial; SCRFD y DDColor son Apache 2.0; la animación Lottie es LottieFiles Community License (conviene atribución).
 
 ## Roadmap discutido

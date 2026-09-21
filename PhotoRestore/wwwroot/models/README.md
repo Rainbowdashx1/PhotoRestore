@@ -1,7 +1,45 @@
 # Modelos de PhotoRestore
 
-Modelos ONNX servidos estáticamente por la app. Toda la inferencia es local
-(navegador, ONNX Runtime Web con WebGPU → WASM).
+Modelos ONNX. Toda la inferencia es local (navegador, ONNX Runtime Web con
+WebGPU → WASM).
+
+## Cómo se obtienen en tiempo de ejecución
+
+`wwwroot/js/model-loader.js` carga los modelos en este orden: memoria →
+Cache Storage del navegador (persistente en el PC del usuario) → `./models/…`
+servido por la web → URL remota de respaldo en HuggingFace (solo para los
+modelos grandes, que no están en git). La descarga grande ocurre una sola vez
+por navegador; después queda en Cache Storage. Esto permite desplegar en
+Azure Static Web Apps sin subir los .onnx al repo.
+
+| Archivo | En git | Respaldo remoto |
+|---|---|---|
+| `realesrgan-x4.onnx` | Sí | No hace falta (5 MB) |
+| `scrfd-2.5g.onnx` | Sí | **No** (el original de HF tiene `ceil_mode=1` y rompe WebGPU; el parcheado solo vive aquí) |
+| `gfpgan-v1.4.onnx` | No | `https://huggingface.co/HowToSD/GFPGAN-ONNX/resolve/main/GFPGANv1.4.onnx` |
+| `rmbg-1.4.onnx` | No | `https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx` |
+| `ddcolor.onnx` | No | `https://huggingface.co/RainBowDashX/photorestore-ddcolor/resolve/main/ddcolor.onnx` (exporte propio subido a un repo HF del proyecto). Para regenerarlo: `tools/export_ddcolor.py` |
+
+Para desarrollo local basta con descargar los tres grandes a esta carpeta con
+las URLs de la tabla de abajo (el navegador los encontrará en `./models/`).
+
+### ¿Por qué DDColor se hospeda en un repo HF propio y los demás no?
+
+GFPGAN y RMBG tienen su `.onnx` oficial ya convertido y compatible en
+HuggingFace, así que se descargan directamente de los repos de sus autores.
+DDColor no: el repo oficial (`piddnad/ddcolor_paper_tiny`) solo tiene los
+**pesos PyTorch** y el de GitHub solo el **código** — HuggingFace aloja
+archivos, no convierte formatos. Los exports ONNX públicos que existen no
+sirven: el de Qualcomm lleva la normalización ImageNet integrada y diverge del
+pipeline oficial (corr 0.64), y el de edgetools es fp16 (rompería el fallback
+WASM/CPU, que no tiene kernels fp16 para Conv). `colorize.js` necesita un
+contrato exacto (input `[1,3,512,512]` RGB 0..1 sin normalizar, output
+`[1,2,512,512]` croma AB, fp32, `ceil_mode=0`), así que el `.onnx` es un
+exporte propio (`tools/export_ddcolor.py`) y el repo
+[RainBowDashX/photorestore-ddcolor](https://huggingface.co/RainBowDashX/photorestore-ddcolor)
+solo lo hospeda — el modelo es de piddnad (ver licencias en la tabla).
+
+## Tabla de modelos
 
 | Archivo | Modelo | Tamaño | Origen |
 |---|---|---|---|
@@ -32,7 +70,7 @@ Modelos ONNX servidos estáticamente por la app. Toda la inferencia es local
   `ceil_mode=0` (sin problema WebGPU). El export de Qualcomm (`image` 256×256)
   se descartó: lleva la normalización ImageNet integrada y diverge del oficial
   (corr 0.64); el de edgetools es fiel pero fp16 (rompería el fallback WASM).
-- `rmbg-1.4.onnx` (opset 17): input [1, 3, 1024, 1024] fp32, RGB estirado a
+- `rmbg-1.4.onnx` (opset 11): input [1, 3, 1024, 1024] fp32, RGB estirado a
   1024×1024 y normalizado x/255 − 0.5 (mean [0.5,0.5,0.5], std [1,1,1], como
   el ejemplo oficial del model card) → output [1, 1, 1024, 1024] con logits de
   la máscara. Postprocesado oficial: reescalado bilineal al tamaño original +
@@ -41,10 +79,9 @@ Modelos ONNX servidos estáticamente por la app. Toda la inferencia es local
 
 ## Notas
 
-- `gfpgan-v1.4.onnx` y `rmbg-1.4.onnx` están en `.gitignore` por su tamaño;
-  `ddcolor.onnx` sí está commiteado aunque la nota histórica diga lo contrario.
-  Las URLs de descarga están en la tabla de arriba. Todos los modelos se
-  mantienen en fp32 (no fp16) porque el EP
+- `gfpgan-v1.4.onnx`, `ddcolor.onnx` y `rmbg-1.4.onnx` están en `.gitignore`
+  por su tamaño; el navegador los descarga bajo demanda (ver arriba). Todos los
+  modelos se mantienen en fp32 (no fp16) porque el EP
   WASM/CPU de ONNX Runtime Web no tiene kernels fp16 para Conv, y el fallback
   WebGPU → WASM debe seguir funcionando. Sus ops son todos comunes y soportados
   por el EP WebGPU (Conv, Resize, LeakyRelu, Gemm…).

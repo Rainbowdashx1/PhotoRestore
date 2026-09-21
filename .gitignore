@@ -10,3 +10,12 @@ obj/
 # excluirlo de git y alojarlo aparte.
 /.vs/PhotoRestore.slnx
 /.vs/PhotoRestore/CopilotIndices/18.11.979.32481
+
+# Modelos grandes: no caben en GitHub ni en un despliegue estático. El navegador
+# los descarga una vez (Cache Storage) desde ./models/ o desde HuggingFace
+# (ver PhotoRestore/wwwroot/js/model-loader.js). Para desarrollo local se
+# descargan a mano con las URLs de PhotoRestore/wwwroot/models/README.md.
+PhotoRestore/wwwroot/models/gfpgan-v1.4.onnx
+PhotoRestore/wwwroot/models/ddcolor.onnx
+PhotoRestore/wwwroot/models/rmbg-1.4.onnx
+PhotoRestore/models-backup/
