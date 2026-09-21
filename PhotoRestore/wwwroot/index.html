@@ -36,6 +36,9 @@
     <!-- ONNX Runtime Web desde CDN (prototipo, versión fijada).
          Para producción, autoalojar los dist de ort en wwwroot/lib/ort. -->
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js"></script>
+    <!-- Cargador de modelos con caché persistente (Cache Storage) y respaldo
+         remoto en HuggingFace para despliegues estáticos. -->
+    <script src="js/model-loader.js"></script>
     <!-- Librerías de UI desde CDN (prototipo, versiones fijadas).
          Para producción, autoalojar en wwwroot/lib/. -->
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
