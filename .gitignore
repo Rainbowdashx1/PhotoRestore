@@ -8,8 +8,9 @@ obj/
 # Nota: PhotoRestore/wwwroot/models/realesrgan-x4.onnx (~5 MB) se incluye en el
 # prototipo para que funcione tal cual; si el modelo creciera, convendría
 # excluirlo de git y alojarlo aparte.
-/.vs/PhotoRestore.slnx
-/.vs/PhotoRestore/CopilotIndices/18.11.979.32481
+# Archivos del IDE
+.vs/
+*.user
 
 # Modelos grandes: no caben en GitHub ni en un despliegue estático. El navegador
 # los descarga una vez (Cache Storage) desde ./models/ o desde HuggingFace
