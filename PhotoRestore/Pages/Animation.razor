@@ -1,0 +1,389 @@
+@page "/animacion"
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>PhotoRestore — Animación de imágenes</PageTitle>
+
+<div class="hero">
+    <h1>Animación</h1>
+    <p class="hero-sub">
+        Convierte una imagen en un GIF o vídeo animado con ffmpeg,
+        directamente en tu navegador. Tu imagen nunca sale de tu dispositivo.
+    </p>
+</div>
+
+<div class="glass-card anim-enter">
+    <div class="dropzone" @ref="dropzoneRef">
+        <InputFile class="dropzone-input" OnChange="CargarImagen" accept="image/*" title="Selecciona una imagen" />
+        <svg class="dz-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+             stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        @if (imagenNombre is not null && imagenBytes is not null)
+        {
+            <div class="dz-preview fade-in">
+                @if (originalUrl is not null)
+                {
+                    <img class="dz-thumb" src="@originalUrl" alt="Vista previa de la imagen seleccionada" />
+                }
+                <div class="dz-info">
+                    <p class="dz-file">@imagenNombre</p>
+                    <span class="dz-hint">@imagenAncho × @imagenAlto px · haz clic o suelta otra imagen para cambiar</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            <p>Arrastra una imagen o haz clic para seleccionar</p>
+            <span class="dz-hint">PNG, JPG, WebP… hasta 25 MB</span>
+        }
+    </div>
+</div>
+
+<div class="glass-card anim-enter">
+    <span class="card-label">Tipo de animación</span>
+    <div class="mode-cards">
+        <label class="mode-card @(tipo == "rotate-cw" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="tipo" value="rotate-cw" checked="@(tipo == "rotate-cw")"
+                   disabled="@ocupado" @onchange='() => tipo = "rotate-cw"' />
+            <div class="mode-head">
+                <span class="mode-title">Rotación horaria</span>
+                <span class="mode-model">Bucle</span>
+            </div>
+            <p class="mode-desc">
+                La imagen da una vuelta completa en el sentido de las agujas del reloj.
+            </p>
+        </label>
+        <label class="mode-card @(tipo == "rotate-ccw" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="tipo" value="rotate-ccw" checked="@(tipo == "rotate-ccw")"
+                   disabled="@ocupado" @onchange='() => tipo = "rotate-ccw"' />
+            <div class="mode-head">
+                <span class="mode-title">Rotación antihoraria</span>
+                <span class="mode-model">Bucle</span>
+            </div>
+            <p class="mode-desc">
+                La imagen da una vuelta completa en sentido contrario a las agujas del reloj.
+            </p>
+        </label>
+        <label class="mode-card @(tipo == "slide" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="tipo" value="slide" checked="@(tipo == "slide")"
+                   disabled="@ocupado" @onchange='() => tipo = "slide"' />
+            <div class="mode-head">
+                <span class="mode-title">Entrar por la izquierda</span>
+                <span class="mode-model">Deslizar</span>
+            </div>
+            <p class="mode-desc">
+                La imagen aparece deslizándose de izquierda a derecha hasta quedar centrada.
+            </p>
+        </label>
+        <label class="mode-card @(tipo == "fade" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="tipo" value="fade" checked="@(tipo == "fade")"
+                   disabled="@ocupado" @onchange='() => tipo = "fade"' />
+            <div class="mode-head">
+                <span class="mode-title">Aparecer y desaparecer</span>
+                <span class="mode-model">Fundido</span>
+            </div>
+            <p class="mode-desc">
+                La imagen surge con un fundido desde el fondo y se desvanece al final.
+            </p>
+        </label>
+        <label class="mode-card @(tipo == "wipe" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="tipo" value="wipe" checked="@(tipo == "wipe")"
+                   disabled="@ocupado" @onchange='() => tipo = "wipe"' />
+            <div class="mode-head">
+                <span class="mode-title">Carga ascendente</span>
+                <span class="mode-model">Rellenar</span>
+            </div>
+            <p class="mode-desc">
+                La imagen se revela poco a poco de abajo hacia arriba, como una
+                barra de carga que se llena, y luego retrocede. En bucle.
+            </p>
+        </label>
+    </div>
+</div>
+
+<div class="glass-card anim-enter">
+    <span class="card-label">Duración</span>
+    <div class="scale-pills">
+        @foreach (var d in new[] { 2, 3, 5 })
+        {
+            var valor = d;
+            <label class="pill @(duracion == valor ? "active" : "") @(ocupado ? "disabled" : "")">
+                <input type="radio" name="duracion" value="@valor" checked="@(duracion == valor)"
+                       disabled="@ocupado" @onchange="() => duracion = valor" />
+                @valor s
+            </label>
+        }
+    </div>
+
+    <span class="card-label" style="margin-top: 1.25rem;">Fondo</span>
+    <div class="scale-pills">
+        <label class="pill @(fondo == "white" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="fondo" value="white" checked="@(fondo == "white")"
+                   disabled="@ocupado" @onchange='() => fondo = "white"' />
+            Blanco
+        </label>
+        <label class="pill @(fondo == "black" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="fondo" value="black" checked="@(fondo == "black")"
+                   disabled="@ocupado" @onchange='() => fondo = "black"' />
+            Negro
+        </label>
+        <label class="pill @(fondo == "none" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="fondo" value="none" checked="@(fondo == "none")"
+                   disabled="@ocupado" @onchange='() => { fondo = "none"; formato = "apng"; }' />
+            Sin fondo · transparente
+        </label>
+    </div>
+
+    <span class="card-label" style="margin-top: 1.25rem;">Formato de salida</span>
+    <div class="scale-pills">
+        <label class="pill @(formato == "gif" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="formato" value="gif" checked="@(formato == "gif")"
+                   disabled="@ocupado" @onchange='() => formato = "gif"' />
+            GIF · universal
+        </label>
+        <label class="pill @(formato == "apng" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="formato" value="apng" checked="@(formato == "apng")"
+                   disabled="@ocupado" @onchange='() => formato = "apng"' />
+            APNG · transparencia suave
+        </label>
+        <label class="pill @(formato == "mp4" ? "active" : "") @(ocupado || fondo == "none" ? "disabled" : "")">
+            <input type="radio" name="formato" value="mp4" checked="@(formato == "mp4")"
+                   disabled="@(ocupado || fondo == "none")" @onchange='() => formato = "mp4"' />
+            MP4 · más ligero
+        </label>
+    </div>
+    <p class="output-hint">
+        Salida: máx. 640 px de lado · @FPS fps
+        @if (fondo == "none")
+        {
+            <text>· la transparencia solo está en GIF y APNG; en GIF el fundido transparente se ve escalonado (usa APNG)</text>
+        }
+    </p>
+    <p class="output-hint">
+        <strong>GIF</strong>: se anima en todas partes (apps, redes, visores).
+        <strong>APNG</strong>: máxima calidad y transparencia real, pero solo se anima en navegadores
+        (si al descargarlo se ve quieto, ábrelo con Edge/Chrome — es el visor, no el archivo).
+        <strong>MP4</strong>: vídeo ligero, sin transparencia.
+    </p>
+</div>
+
+<button class="btn-restore" @onclick="Generar" disabled="@(imagenBytes is null || ocupado)">
+    @(ocupado ? "Generando…" : "Crear animación")
+</button>
+
+@if (ocupado)
+{
+    <div class="glass-card processing-card fade-in">
+        <lottie-player src="lottie/loading.json" autoplay loop
+                       style="width: 140px; height: 105px;"></lottie-player>
+        <p class="status-text" role="status">@estado</p>
+        @if (progreso > 0)
+        {
+            <div class="progress-track">
+                <div class="progress-fill" style="width: @progreso%"></div>
+            </div>
+        }
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(error))
+{
+    <div class="glass-card error-card fade-in">@error</div>
+}
+
+@if (resultUrl is not null)
+{
+    <div class="glass-card result-card fade-in">
+        <span class="card-label">Resultado</span>
+        @if (formato == "mp4")
+        {
+            <video class="anim-preview" src="@resultUrl" autoplay loop muted playsinline></video>
+        }
+        else
+        {
+            <img class="anim-preview" src="@resultUrl" alt="Animación generada" />
+        }
+        <p class="result-meta">
+            <strong>@resultWidth × @resultHeight px</strong> · @duracion s · @formato.ToUpperInvariant()
+        </p>
+        <a class="btn-download" href="@resultUrl" download="@NombreDescarga">Descargar animación</a>
+    </div>
+}
+
+<footer class="page-footer">
+    Tu imagen nunca sale de tu dispositivo · ffmpeg.wasm
+</footer>
+
+@code {
+    private const long MaxFileSize = 25 * 1024 * 1024; // 25 MB
+    private const int FPS = 24; // informativo; el valor real está en animator.js
+
+    private IJSObjectReference? module;
+    private IJSObjectReference? uiModule;
+    private DotNetObjectReference<Animation>? progressRef;
+    private ElementReference dropzoneRef;
+
+    private byte[]? imagenBytes;
+    private string? imagenMime;
+    private string? imagenNombre;
+    private int imagenAncho;
+    private int imagenAlto;
+    private string tipo = "rotate-cw"; // "rotate-cw" | "rotate-ccw" | "slide" | "fade"
+    private int duracion = 3;
+    private string fondo = "white";
+    private string formato = "gif";
+    private string? originalUrl;
+    private string? resultUrl;
+    private int resultWidth;
+    private int resultHeight;
+    private string? estado;
+    private string? error;
+    private int progreso;
+    private bool ocupado;
+
+    // APNG se descarga con extensión .png para que el SO lo reconozca.
+    private string NombreDescarga =>
+        $"{Path.GetFileNameWithoutExtension(imagenNombre ?? "imagen")}-{tipo}.{(formato == "apng" ? "png" : formato)}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/animator.js");
+            uiModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/ui.js");
+            progressRef = DotNetObjectReference.Create(this);
+
+            await uiModule.InvokeVoidAsync("initAnimations");
+            await uiModule.InvokeVoidAsync("initDropzone", dropzoneRef);
+        }
+    }
+
+    private async Task CargarImagen(InputFileChangeEventArgs e)
+    {
+        error = null;
+        resultUrl = null;
+        estado = null;
+        imagenBytes = null;
+        imagenNombre = null;
+        imagenAncho = 0;
+        imagenAlto = 0;
+
+        var file = e.File;
+        if (!file.ContentType.StartsWith("image/"))
+        {
+            error = "Formato no soportado: selecciona un archivo de imagen.";
+            return;
+        }
+
+        try
+        {
+            using var stream = file.OpenReadStream(MaxFileSize);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            imagenBytes = ms.ToArray();
+            imagenMime = file.ContentType;
+            imagenNombre = file.Name;
+
+            if (module is not null)
+            {
+                if (originalUrl is not null)
+                    await module.InvokeVoidAsync("revokeObjectUrl", originalUrl);
+                originalUrl = await module.InvokeAsync<string>("createObjectUrl", imagenBytes, imagenMime);
+
+                var size = await module.InvokeAsync<ImageSize>("getImageSize", imagenBytes, imagenMime);
+                imagenAncho = size.Width;
+                imagenAlto = size.Height;
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo leer la imagen: {ex.Message}";
+            imagenBytes = null;
+            imagenNombre = null;
+        }
+    }
+
+    private async Task Generar()
+    {
+        if (progressRef is null || imagenBytes is null || module is null)
+            return;
+
+        ocupado = true;
+        error = null;
+        resultUrl = null;
+        progreso = 0;
+
+        try
+        {
+            var result = await module.InvokeAsync<AnimResult>(
+                "animate", imagenBytes, imagenMime, tipo, duracion, fondo, formato, progressRef);
+            resultUrl = result.ResultUrl;
+            resultWidth = result.Width;
+            resultHeight = result.Height;
+        }
+        catch (Exception ex)
+        {
+            error = $"Error al generar la animación: {ex.Message}";
+        }
+        finally
+        {
+            ocupado = false;
+            estado = null;
+            progreso = 0;
+        }
+    }
+
+    [JSInvokable]
+    public void OnProgreso(int pct)
+    {
+        progreso = pct;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void OnEstado(string texto)
+    {
+        estado = texto;
+        progreso = 0; // cambio de fase: reinicia la barra
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        progressRef?.Dispose();
+        try
+        {
+            if (module is not null)
+            {
+                if (originalUrl is not null)
+                    await module.InvokeVoidAsync("revokeObjectUrl", originalUrl);
+                if (resultUrl is not null)
+                    await module.InvokeVoidAsync("revokeObjectUrl", resultUrl);
+                await module.DisposeAsync();
+            }
+            if (uiModule is not null)
+                await uiModule.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // El circuito/JS ya no está disponible al cerrar la página.
+        }
+    }
+
+    private sealed class ImageSize
+    {
+        public int Width { get; set; }
+        public int Height { get; set; }
+    }
+
+    private sealed class AnimResult
+    {
+        public string ResultUrl { get; set; } = "";
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public string Format { get; set; } = "";
+    }
+}
