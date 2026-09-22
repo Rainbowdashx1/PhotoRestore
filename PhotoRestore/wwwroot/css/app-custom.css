@@ -264,6 +264,23 @@ a {
     color: var(--text-muted);
 }
 
+/* Enlace a la documentación oficial del modelo, dentro de la descripción. */
+.mode-doc {
+    display: inline-block;
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--accent-b);
+    text-decoration: none;
+    opacity: 0.85;
+    transition: opacity 0.2s ease;
+}
+
+.mode-doc:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
+
 @media (max-width: 767.98px) {
     .mode-cards {
         grid-template-columns: 1fr;

@@ -56,6 +56,8 @@
             <p class="mode-desc">
                 Mejora la nitidez y aumenta la resolución (hasta x4).
                 Úsalo para fotos pixeladas, comprimidas o de baja calidad.
+                <a class="mode-doc" href="https://github.com/xinntao/Real-ESRGAN" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
             </p>
         </label>
         <label class="mode-card @(modo == "caras" ? "active" : "") @(ocupado ? "disabled" : "")">
@@ -68,6 +70,8 @@
             <p class="mode-desc">
                 Restaura rostros dañados o desenfocados.
                 Ideal para fotos antiguas y retratos; mantiene el tamaño original.
+                <a class="mode-doc" href="https://github.com/TencentARC/GFPGAN" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
             </p>
         </label>
         <label class="mode-card @(modo == "colorizar" ? "active" : "") @(ocupado ? "disabled" : "")">
@@ -80,6 +84,8 @@
             <p class="mode-desc">
                 Da color a fotos en blanco y negro, manteniendo el tamaño original.
                 Úsalo solo con imágenes en escala de grises.
+                <a class="mode-doc" href="https://github.com/piddnad/DDColor" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
             </p>
         </label>
         <label class="mode-card @(modo == "fondo" ? "active" : "") @(ocupado ? "disabled" : "")">
@@ -92,6 +98,8 @@
             <p class="mode-desc">
                 Detecta el sujeto principal y elimina el fondo automáticamente.
                 Devuelve un PNG con transparencia, en el tamaño original.
+                <a class="mode-doc" href="https://huggingface.co/briaai/RMBG-1.4" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
             </p>
         </label>
     </div>
@@ -120,7 +128,7 @@
 }
 
 <button class="btn-restore" @onclick="Restaurar" disabled="@(imagenBytes is null || ocupado)">
-    @(ocupado ? "Procesando…" : "Restaurar")
+    @(ocupado ? "Procesando…" : TextoBoton)
 </button>
 
 @if (ocupado)
@@ -225,6 +233,15 @@
         "colorizar" => "color",
         "fondo" => "sin-fondo",
         _ => $"x{factor}"
+    };
+
+    // Texto del botón principal según la acción real de cada modo.
+    private string TextoBoton => modo switch
+    {
+        "caras" => "Restaurar caras",
+        "colorizar" => "Colorizar foto",
+        "fondo" => "Quitar fondo",
+        _ => "Restaurar"
     };
 
     private static string EtiquetaFactor(int f) => f switch
