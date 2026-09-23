@@ -19,4 +19,6 @@ obj/
 PhotoRestore/wwwroot/models/gfpgan-v1.4.onnx
 PhotoRestore/wwwroot/models/ddcolor.onnx
 PhotoRestore/wwwroot/models/rmbg-1.4.onnx
+PhotoRestore/wwwroot/models/birefnet-lite-512.onnx
+PhotoRestore/wwwroot/models/birefnet-lite.onnx
 PhotoRestore/models-backup/

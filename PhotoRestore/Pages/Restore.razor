@@ -44,7 +44,56 @@
 </div>
 
 <div class="glass-card anim-enter">
-    <span class="card-label">Modo de restauración</span>
+    <span class="card-label">Quitar fondo · de básico a mejor</span>
+    <div class="mode-cards">
+        <label class="mode-card @(modo == "fondo" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="fondo" checked="@(modo == "fondo")"
+                   disabled="@ocupado" @onchange='() => modo = "fondo"' />
+            <div class="mode-head">
+                <span class="mode-title">Quitar fondo</span>
+                <span class="mode-model">RMBG-1.4</span>
+            </div>
+            <p class="mode-desc">
+                Detecta el sujeto principal y elimina el fondo automáticamente.
+                Devuelve un PNG con transparencia, en el tamaño original.
+                <a class="mode-doc" href="https://huggingface.co/briaai/RMBG-1.4" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
+            </p>
+        </label>
+        <label class="mode-card @(modo == "fondopro" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="fondopro" checked="@(modo == "fondopro")"
+                   disabled="@ocupado" @onchange='() => modo = "fondopro"' />
+            <div class="mode-head">
+                <span class="mode-title">Quitar fondo Pro</span>
+                <span class="mode-model">BiRefNet</span>
+            </div>
+            <p class="mode-desc">
+                Máxima calidad en bordes difíciles (pelo, velos, semitransparencias).
+                Modelo pesado (~185 MB la primera vez); recomendado con WebGPU.
+                <a class="mode-doc" href="https://github.com/ZhengPeng7/BiRefNet" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
+            </p>
+        </label>
+        <label class="mode-card @(modo == "fondomax" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="fondomax" checked="@(modo == "fondomax")"
+                   disabled="@ocupado" @onchange='() => modo = "fondomax"' />
+            <div class="mode-head">
+                <span class="mode-title">Quitar fondo Pro Max</span>
+                <span class="mode-model">BiRefNet 1024</span>
+                <span class="mode-badge">Experimental</span>
+            </div>
+            <p class="mode-desc">
+                Igual que Pro pero con la máscara calculada a 1024×1024: más detalle fino.
+                Necesita mucha memoria (~9 GB); puede fallar en equipos modestos.
+                <a class="mode-doc" href="https://huggingface.co/onnx-community/BiRefNet_lite-ONNX" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
+            </p>
+        </label>
+    </div>
+</div>
+
+<div class="glass-card anim-enter">
+    <span class="card-label">Mejorar imagen</span>
     <div class="mode-cards">
         <label class="mode-card @(modo == "general" ? "active" : "") @(ocupado ? "disabled" : "")">
             <input type="radio" name="modo" value="general" checked="@(modo == "general")"
@@ -74,6 +123,12 @@
                    rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
             </p>
         </label>
+    </div>
+</div>
+
+<div class="glass-card anim-enter">
+    <span class="card-label">Colorizar</span>
+    <div class="mode-cards">
         <label class="mode-card @(modo == "colorizar" ? "active" : "") @(ocupado ? "disabled" : "")">
             <input type="radio" name="modo" value="colorizar" checked="@(modo == "colorizar")"
                    disabled="@ocupado" @onchange='() => modo = "colorizar"' />
@@ -85,20 +140,6 @@
                 Da color a fotos en blanco y negro, manteniendo el tamaño original.
                 Úsalo solo con imágenes en escala de grises.
                 <a class="mode-doc" href="https://github.com/piddnad/DDColor" target="_blank"
-                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
-            </p>
-        </label>
-        <label class="mode-card @(modo == "fondo" ? "active" : "") @(ocupado ? "disabled" : "")">
-            <input type="radio" name="modo" value="fondo" checked="@(modo == "fondo")"
-                   disabled="@ocupado" @onchange='() => modo = "fondo"' />
-            <div class="mode-head">
-                <span class="mode-title">Quitar fondo</span>
-                <span class="mode-model">RMBG-1.4</span>
-            </div>
-            <p class="mode-desc">
-                Detecta el sujeto principal y elimina el fondo automáticamente.
-                Devuelve un PNG con transparencia, en el tamaño original.
-                <a class="mode-doc" href="https://huggingface.co/briaai/RMBG-1.4" target="_blank"
                    rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
             </p>
         </label>
@@ -189,7 +230,7 @@
 }
 
 <footer class="page-footer">
-    Tu imagen nunca sale de tu dispositivo · Real-ESRGAN · GFPGAN · DDColor · RMBG-1.4 · ONNX Runtime Web
+    Tu imagen nunca sale de tu dispositivo · Real-ESRGAN · GFPGAN · DDColor · RMBG-1.4 · BiRefNet · ONNX Runtime Web
 </footer>
 
 @code {
@@ -199,6 +240,7 @@
     private IJSObjectReference? faceModule;
     private IJSObjectReference? colorModule;
     private IJSObjectReference? bgModule;
+    private IJSObjectReference? bgProModule;
     private IJSObjectReference? uiModule;
     private DotNetObjectReference<Restore>? progressRef;
     private ElementReference dropzoneRef;
@@ -210,7 +252,7 @@
     private string? imagenNombre;
     private int imagenAncho;
     private int imagenAlto;
-    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN) | "colorizar" (DDColor) | "fondo" (RMBG-1.4)
+    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN) | "colorizar" (DDColor) | "fondo" (RMBG-1.4) | "fondopro" (BiRefNet 512) | "fondomax" (BiRefNet 1024)
     private int factor = 1;
     private string? originalUrl;
     private string? resultUrl;
@@ -232,6 +274,8 @@
         "caras" => "caras",
         "colorizar" => "color",
         "fondo" => "sin-fondo",
+        "fondopro" => "sin-fondo-pro",
+        "fondomax" => "sin-fondo-max",
         _ => $"x{factor}"
     };
 
@@ -241,6 +285,8 @@
         "caras" => "Restaurar caras",
         "colorizar" => "Colorizar foto",
         "fondo" => "Quitar fondo",
+        "fondopro" => "Quitar fondo",
+        "fondomax" => "Quitar fondo",
         _ => "Restaurar"
     };
 
@@ -259,6 +305,7 @@
             faceModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/face-restore.js");
             colorModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/colorize.js");
             bgModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/remove-bg.js");
+            bgProModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/remove-bg-birefnet.js");
             uiModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/ui.js");
             progressRef = DotNetObjectReference.Create(this);
 
@@ -349,6 +396,30 @@
                 resultWidth = result.Width;
                 resultHeight = result.Height;
                 info = "Fondo eliminado. El PNG descargado conserva la transparencia.";
+                hintPendiente = true;
+            }
+            else if (modo == "fondopro")
+            {
+                if (bgProModule is null) return;
+                estado = "Cargando modelo BiRefNet (~185 MB la primera vez)…";
+                var result = await bgProModule.InvokeAsync<UpscaleResult>("removeBackgroundBiRefNet", imagenBytes, imagenMime, progressRef);
+                resultUrl = result.ResultUrl;
+                backend = result.Backend;
+                resultWidth = result.Width;
+                resultHeight = result.Height;
+                info = "Fondo eliminado con BiRefNet. El PNG descargado conserva la transparencia.";
+                hintPendiente = true;
+            }
+            else if (modo == "fondomax")
+            {
+                if (bgProModule is null) return;
+                estado = "Cargando modelo BiRefNet 1024 (~214 MB la primera vez)…";
+                var result = await bgProModule.InvokeAsync<UpscaleResult>("removeBackgroundBiRefNetMax", imagenBytes, imagenMime, progressRef);
+                resultUrl = result.ResultUrl;
+                backend = result.Backend;
+                resultWidth = result.Width;
+                resultHeight = result.Height;
+                info = "Fondo eliminado con BiRefNet a 1024×1024. El PNG descargado conserva la transparencia.";
                 hintPendiente = true;
             }
             else if (modo == "colorizar")
@@ -446,6 +517,8 @@
                 await colorModule.DisposeAsync();
             if (bgModule is not null)
                 await bgModule.DisposeAsync();
+            if (bgProModule is not null)
+                await bgProModule.DisposeAsync();
             if (uiModule is not null)
                 await uiModule.DisposeAsync();
         }
