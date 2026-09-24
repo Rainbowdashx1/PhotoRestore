@@ -14,6 +14,7 @@ El selector de modo son tarjetas con el nombre del modelo y una descripción bre
 | **Caras** | GFPGAN v1.4 + detector SCRFD 2.5G | Detecta caras, las alinea y restaura cada una a 512×512, las pega de vuelta con máscara difuminada | 340 MB + 3,3 MB |
 | **Colorizar** | DDColor-tiny | Convierte fotos en blanco y negro a color, manteniendo el tamaño original | 258 MB |
 | **Quitar fondo** | RMBG-1.4 | Detecta el sujeto principal automáticamente (sin selección manual) y devuelve PNG con transparencia, en el tamaño original | 176 MB |
+| **Añadir sombra** | RMBG-1.4 + sombra sintética (sin IA) | Quita el fondo y añade una sombra de caída configurable (ángulo, distancia, difuminado, opacidad) sobre fondo blanco o transparente; los ajustes se recomponen en tiempo real sin repetir la inferencia | 0 MB extra (reutiliza RMBG) |
 
 Detalles de tensores, orígenes, licencias y parches de cada modelo: [`PhotoRestore/wwwroot/models/README.md`](PhotoRestore/wwwroot/models/README.md).
 
@@ -52,7 +53,8 @@ PhotoRestore/
 │   │   ├── upscaler.js        # Real-ESRGAN: tiles 128px + solape, reescalado x1/x2/x4
 │   │   ├── face-restore.js    # SCRFD (detecta) → alineado ArcFace → GFPGAN → pegado suave
 │   │   ├── colorize.js        # DDColor: RGB→Lab, modelo a 512², AB reescalado, Lab→RGB
-│   │   ├── remove-bg.js       # RMBG-1.4: máscara de sujeto a 1024², min-max → alpha
+│   │   ├── remove-bg.js       # RMBG-1.4: máscara de sujeto a 1024², min-max → alpha; también sombra sintética (silueta + desenfoque)
+│   │   ├── remove-bg-birefnet.js  # BiRefNet (modos Pro y Pro Max): bordes difíciles, máscara a 512² o 1024²
 │   │   └── ui.js              # Animaciones GSAP, dropzone drag&drop, hint del comparador
 │   ├── models/                # Modelos ONNX (ver su README)
 │   ├── css/app-custom.css     # Tema oscuro, glassmorphism, variables de paleta
@@ -90,4 +92,5 @@ Lo que nunca se pudo probar automatizado (sin navegador automatizable en el ento
 
 - **Próximos modelos candidatos** (evaluados en sesión, por orden de valor/esfuerzo): **CodeFormer** (alternativa a GFPGAN para caras muy degradadas, con parámetro fidelidad/calidad), **Real-ESRGAN Anime** (variante para ilustraciones; reutiliza el pipeline de `upscaler.js`), **FastSAM/MobileSAM + LaMa** ("borrador mágico": segmentación por clic + inpainting; requiere UI de canvas/máscara), **Zero-DCE** (mejora de fotos con poca luz, <1 MB).
 - **RMBG-1.4 (quitar fondo): implementado.** Limitación conocida: la selección del sujeto es automática; para elegir qué quitar haría falta la vía FastSAM + LaMa de arriba.
+- **Añadir sombra: implementado** con sombra sintética (silueta del alpha de RMBG-1.4 + desplazamiento + desenfoque gaussiano + opacidad, sobre fondo blanco o transparente, en `js/remove-bg.js`). La vía con **modelo de IA quedó descartada para el navegador**: todo el estado del arte en generación de sombras es difusión (Shadow Generation for Composite Image, CVPR 2024; CoShadow/MultiShadow, 2026; Controllable Shadow Generation de Jasper, single-step), y todos arrastran un UNet tipo Stable Diffusion + VAE (1–4 GB, fp16, varios pasos de denoise): no cabe en Cache Storage junto al resto de modelos y el backend WASM no tiene kernels fp16. Tampoco existen exports ONNX públicos pequeños de estos modelos. Limitación de la sombra sintética: proyecta la silueta deformada, no la forma física real del objeto (suficiente para producto/retrato sobre fondo limpio).
 - **Restauración de video**: analizado y en pausa. Requiere backend con GPU (yt-dlp/ffmpeg + batching), ya no cabe en el navegador; frame-a-frame con Real-ESRGAN produce parpadeo temporal (la solución sería RealBasicVSR/BasicVSR++). Referencia: https://github.com/k4yt3x/video2x. Ojo: descargar de YouTube viola sus ToS para un servicio público; la variante segura es upload de video propio.

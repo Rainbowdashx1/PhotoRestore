@@ -44,7 +44,7 @@
 </div>
 
 <div class="glass-card anim-enter">
-    <span class="card-label">Quitar fondo · de básico a mejor</span>
+    <span class="card-label">Quitar fondo y añadir sombra</span>
     <div class="mode-cards">
         <label class="mode-card @(modo == "fondo" ? "active" : "") @(ocupado ? "disabled" : "")">
             <input type="radio" name="modo" value="fondo" checked="@(modo == "fondo")"
@@ -87,6 +87,19 @@
                 Necesita mucha memoria (~9 GB); puede fallar en equipos modestos.
                 <a class="mode-doc" href="https://huggingface.co/onnx-community/BiRefNet_lite-ONNX" target="_blank"
                    rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
+            </p>
+        </label>
+        <label class="mode-card @(modo == "sombra" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="sombra" checked="@(modo == "sombra")"
+                   disabled="@ocupado" @onchange='() => modo = "sombra"' />
+            <div class="mode-head">
+                <span class="mode-title">Añadir sombra</span>
+                <span class="mode-model">RMBG-1.4 + sintética</span>
+            </div>
+            <p class="mode-desc">
+                Quita el fondo y añade una sombra de caída configurable
+                (ángulo, distancia, difuminado, opacidad) sobre fondo blanco o
+                transparente. Los ajustes se aplican al instante, sin reprocesar.
             </p>
         </label>
     </div>
@@ -165,6 +178,51 @@
         {
             <p class="output-hint">Salida: <strong>@(imagenAncho * factor) × @(imagenAlto * factor) px</strong></p>
         }
+    </div>
+}
+
+@if (modo == "sombra")
+{
+    <div class="glass-card anim-enter">
+        <span class="card-label">Sombra</span>
+        <div class="shadow-controls">
+            <label class="slider-row">
+                <span class="slider-name">Ángulo</span>
+                <input type="range" min="0" max="360" value="@sombraAngulo" disabled="@ocupado"
+                       @oninput="e => CambiarSombra(e, v => sombraAngulo = v)" />
+                <span class="slider-val">@sombraAngulo°</span>
+            </label>
+            <label class="slider-row">
+                <span class="slider-name">Distancia</span>
+                <input type="range" min="0" max="200" value="@sombraDistancia" disabled="@ocupado"
+                       @oninput="e => CambiarSombra(e, v => sombraDistancia = v)" />
+                <span class="slider-val">@sombraDistancia px</span>
+            </label>
+            <label class="slider-row">
+                <span class="slider-name">Difuminado</span>
+                <input type="range" min="0" max="100" value="@sombraDifuminado" disabled="@ocupado"
+                       @oninput="e => CambiarSombra(e, v => sombraDifuminado = v)" />
+                <span class="slider-val">@sombraDifuminado px</span>
+            </label>
+            <label class="slider-row">
+                <span class="slider-name">Opacidad</span>
+                <input type="range" min="0" max="100" value="@sombraOpacidad" disabled="@ocupado"
+                       @oninput="e => CambiarSombra(e, v => sombraOpacidad = v)" />
+                <span class="slider-val">@sombraOpacidad %</span>
+            </label>
+        </div>
+        <div class="scale-pills shadow-bg-pills">
+            <label class="pill @(sombraFondo == "blanco" ? "active" : "") @(ocupado ? "disabled" : "")">
+                <input type="radio" name="sombraFondo" value="blanco" checked="@(sombraFondo == "blanco")"
+                       disabled="@ocupado" @onchange='() => CambiarFondoSombra("blanco")' />
+                Fondo blanco
+            </label>
+            <label class="pill @(sombraFondo == "transparente" ? "active" : "") @(ocupado ? "disabled" : "")">
+                <input type="radio" name="sombraFondo" value="transparente" checked="@(sombraFondo == "transparente")"
+                       disabled="@ocupado" @onchange='() => CambiarFondoSombra("transparente")' />
+                Transparente (PNG)
+            </label>
+        </div>
     </div>
 }
 
@@ -252,8 +310,13 @@
     private string? imagenNombre;
     private int imagenAncho;
     private int imagenAlto;
-    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN) | "colorizar" (DDColor) | "fondo" (RMBG-1.4) | "fondopro" (BiRefNet 512) | "fondomax" (BiRefNet 1024)
+    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN) | "colorizar" (DDColor) | "fondo" (RMBG-1.4) | "fondopro" (BiRefNet 512) | "fondomax" (BiRefNet 1024) | "sombra" (RMBG-1.4 + sombra sintética)
     private int factor = 1;
+    private int sombraAngulo = 45;
+    private int sombraDistancia = 25;
+    private int sombraDifuminado = 30;
+    private int sombraOpacidad = 60;
+    private string sombraFondo = "blanco"; // "blanco" | "transparente"
     private string? originalUrl;
     private string? resultUrl;
     private int resultWidth;
@@ -276,6 +339,7 @@
         "fondo" => "sin-fondo",
         "fondopro" => "sin-fondo-pro",
         "fondomax" => "sin-fondo-max",
+        "sombra" => "con-sombra",
         _ => $"x{factor}"
     };
 
@@ -287,6 +351,7 @@
         "fondo" => "Quitar fondo",
         "fondopro" => "Quitar fondo",
         "fondomax" => "Quitar fondo",
+        "sombra" => "Añadir sombra",
         _ => "Restaurar"
     };
 
@@ -422,6 +487,18 @@
                 info = "Fondo eliminado con BiRefNet a 1024×1024. El PNG descargado conserva la transparencia.";
                 hintPendiente = true;
             }
+            else if (modo == "sombra")
+            {
+                if (bgModule is null) return;
+                estado = "Cargando modelo RMBG-1.4 (~168 MB la primera vez)…";
+                var result = await bgModule.InvokeAsync<UpscaleResult>("addShadow", imagenBytes, imagenMime, progressRef, ParametrosSombra());
+                resultUrl = result.ResultUrl;
+                backend = result.Backend;
+                resultWidth = result.Width;
+                resultHeight = result.Height;
+                info = "Sombra añadida. Mueve los controles para retocarla al instante, sin recalcular.";
+                hintPendiente = true;
+            }
             else if (modo == "colorizar")
             {
                 if (colorModule is null) return;
@@ -473,6 +550,47 @@
         resultHeight = result.Height;
         info = result.Faces == 1 ? "Se restauró 1 cara." : $"Se restauraron {result.Faces} caras.";
         hintPendiente = true;
+    }
+
+    private object ParametrosSombra() => new
+    {
+        angulo = sombraAngulo,
+        distancia = sombraDistancia,
+        difuminado = sombraDifuminado,
+        opacidad = sombraOpacidad,
+        fondo = sombraFondo
+    };
+
+    private async Task CambiarSombra(ChangeEventArgs e, Action<int> aplicar)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var v)) return;
+        aplicar(v);
+        await ActualizarSombra();
+    }
+
+    private async Task CambiarFondoSombra(string fondo)
+    {
+        sombraFondo = fondo;
+        await ActualizarSombra();
+    }
+
+    // Recompone la sombra con los parámetros actuales reutilizando el recorte
+    // que addShadow dejó cacheado en JS: no vuelve a ejecutar el modelo.
+    private async Task ActualizarSombra()
+    {
+        if (modo != "sombra" || resultUrl is null || bgModule is null || ocupado)
+            return;
+        try
+        {
+            var result = await bgModule.InvokeAsync<UpscaleResult>("updateShadow", ParametrosSombra());
+            resultUrl = result.ResultUrl;
+            resultWidth = result.Width;
+            resultHeight = result.Height;
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo actualizar la sombra: {ex.Message}";
+        }
     }
 
     [JSInvokable]
