@@ -4,7 +4,15 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Photo Labs</title>
+    <title>Restauración de fotos con IA online | Photo Labs</title>
+    <meta name="description" content="Restaura fotos antiguas, mejora su resolución, coloriza imágenes y quita fondos con IA desde tu navegador. Tus imágenes no se suben a ningún servidor." />
+    <link rel="canonical" href="https://photo-labs.net/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="es_ES" />
+    <meta property="og:site_name" content="Photo Labs" />
+    <meta property="og:title" content="Restauración de fotos con IA online | Photo Labs" />
+    <meta property="og:description" content="Restaura, mejora y edita tus fotos con IA directamente en tu navegador, sin subirlas a ningún servidor." />
+    <meta property="og:url" content="https://photo-labs.net/" />
     <base href="/" />
     <link rel="preload" id="webassembly" />
     <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
@@ -21,14 +29,33 @@
 
 <body>
     <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
+        <main class="content px-4">
+            <div class="hero">
+                <h1>Photo Labs</h1>
+                <p class="hero-sub">
+                    Restauración de fotos con IA, directamente en tu navegador.
+                    Sin servidores: tu imagen nunca sale de tu dispositivo.
+                </p>
+            </div>
+            <section class="glass-card">
+                <h2>Restaura y edita imágenes con IA</h2>
+                <p>
+                    Mejora la nitidez y la resolución, restaura rostros, coloriza fotos
+                    en blanco y negro, quita fondos y añade sombras a tus imágenes.
+                </p>
+                <p>
+                    <a href="/">Restaurar o editar una foto</a> ·
+                    <a href="/animacion">Crear una animación</a>
+                </p>
+                <noscript>
+                    <p>Activa JavaScript en tu navegador para utilizar las herramientas de Photo Labs.</p>
+                </noscript>
+                <p>Cargando herramientas…</p>
+            </section>
+        </main>
     </div>
 
-    <div id="blazor-error-ui">
+    <div id="blazor-error-ui" data-nosnippet>
         An unhandled error has occurred.
         <a href="." class="reload">Reload</a>
         <span class="dismiss">🗙</span>
