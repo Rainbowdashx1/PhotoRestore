@@ -1,10 +1,11 @@
-// remove-bg-birefnet.js — Eliminación de fondo con BiRefNet_lite en dos
+// remove-bg-birefnet.js — Eliminación de fondo con BiRefNet_lite en tres
 // variantes (el modelo base es MIT):
 //
-//   - removeBackgroundBiRefNet:    512×512 (Phoenix-ActuallyFree, 185 MB)
-//   - removeBackgroundBiRefNetMax: 1024×1024 (onnx-community oficial, 214 MB)
+//   - removeBackgroundBiRefNet:     512×512 (Phoenix-ActuallyFree, 185 MB)
+//   - removeBackgroundBiRefNetPlus: 768×768 (exporte propio, tools/export_birefnet_768.py)
+//   - removeBackgroundBiRefNetMax:  1024×1024 (onnx-community oficial, 214 MB)
 //
-// ¿Por qué dos variantes y no el BiRefNet-general completo?
+// ¿Por qué tres variantes y no el BiRefNet-general completo?
 //   - BiRefNet-general fp32 (~928 MB) no cabe en el heap WASM de
 //     onnxruntime-web ("failed to allocate a buffer of size 972666916").
 //   - BiRefNet-general fp16 (~467 MB) exige la feature WebGPU "shader-f16";
@@ -15,6 +16,10 @@
 //     grafo de 16.400 nodos de este export explota en memoria con las convs
 //     deformables emuladas con GatherND/ScatterND) → std::bad_alloc en WASM
 //     (heap máx. 4 GB). Solo es usable con WebGPU en GPUs con bastante VRAM.
+//   - El re-exporte propio a 768×768 sustituye las convs deformables por
+//     GridSample (como hizo el re-exporte de Phoenix a 512): ~1,3 GB de pico
+//     de RAM medidos en la inferencia CPU → cómodo en GPUs de 6-8 GB vía
+//     WebGPU y viable incluso con el fallback WASM (lento, pero funciona).
 //   - El re-exporte a 512×512 tiene un grafo mucho más limpio (2.213 nodos) y
 //     necesita ~2,2 GB: funciona con WebGPU y con el fallback WASM/CPU.
 //     Verificado contra el oficial a 1024 con foto real: correlación de
@@ -41,6 +46,15 @@ const MODELOS = {
         inputSize: 512,
         salidaConSigmoid: true,
         etiquetaMB: '~185 MB'
+    },
+    lite768: {
+        url: './models/birefnet-lite-768.onnx',
+        // Exporte propio (tools/export_birefnet_768.py); respaldo en HF del proyecto.
+        remoteUrl: 'https://huggingface.co/RainBowDashX/photorestore-birefnet-768/resolve/main/birefnet-lite-768.onnx',
+        minBytes: 180_000_000,   // real: 183.891.984 B (fp32)
+        inputSize: 768,
+        salidaConSigmoid: true,
+        etiquetaMB: '~175 MB'
     },
     lite1024: {
         url: './models/birefnet-lite.onnx',
@@ -112,6 +126,13 @@ function resizeBilinear(src, sw, sh, dw, dh) {
 // Devuelve { resultUrl, backend, width, height }.
 export async function removeBackgroundBiRefNet(bytes, mimeType, progressHelper) {
     return await removeBackgroundConFallback(MODELOS.lite512, bytes, mimeType, progressHelper);
+}
+
+// Variante a 768×768 (exporte propio): más detalle fino que 512. ~1,3 GB de
+// pico de memoria en la inferencia → cómoda en WebGPU y viable incluso con el
+// fallback WASM (lento, pero funciona).
+export async function removeBackgroundBiRefNetPlus(bytes, mimeType, progressHelper) {
+    return await removeBackgroundConFallback(MODELOS.lite768, bytes, mimeType, progressHelper);
 }
 
 // Variante a 1024×1024 (más detalle fino). OJO: la inferencia necesita ~8,7 GB;

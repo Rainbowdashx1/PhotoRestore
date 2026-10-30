@@ -18,6 +18,7 @@ Azure Static Web Apps sin subir los .onnx al repo.
 | `scrfd-2.5g.onnx` | Sí | **No** (el original de HF tiene `ceil_mode=1` y rompe WebGPU; el parcheado solo vive aquí) |
 | `gfpgan-v1.4.onnx` | No | `https://huggingface.co/HowToSD/GFPGAN-ONNX/resolve/main/GFPGANv1.4.onnx` |
 | `rmbg-1.4.onnx` | No | `https://huggingface.co/briaai/RMBG-1.4/resolve/main/onnx/model.onnx` |
+| `birefnet-lite-768.onnx` | No | `https://huggingface.co/RainBowDashX/photorestore-birefnet-768/resolve/main/birefnet-lite-768.onnx` (exporte propio subido a un repo HF del proyecto). Para regenerarlo: `tools/export_birefnet_768.py` |
 | `birefnet-lite-512.onnx` | No | `https://huggingface.co/Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX/resolve/main/onnx/model.onnx` |
 | `birefnet-lite.onnx` | No | `https://huggingface.co/onnx-community/BiRefNet_lite-ONNX/resolve/main/onnx/model.onnx` |
 | `ddcolor.onnx` | No | `https://huggingface.co/RainBowDashX/photorestore-ddcolor/resolve/main/ddcolor.onnx` (exporte propio subido a un repo HF del proyecto). Para regenerarlo: `tools/export_ddcolor.py` |
@@ -50,6 +51,7 @@ solo lo hospeda — el modelo es de piddnad (ver licencias en la tabla).
 | `gfpgan-v1.4.onnx` | GFPGAN v1.4 (restauración de caras, fp32) | 340.357.025 B | https://huggingface.co/HowToSD/GFPGAN-ONNX (exporte fiel del .pth oficial TencentARC; Apache 2.0 + licencias de terceros, posible restricción de uso comercial) |
 | `ddcolor.onnx` | DDColor-tiny (colorización B/N → color, fp32) | 270.255.132 B | **Exporte propio** (opset 17) de `piddnad/ddcolor_paper_tiny` (https://huggingface.co/piddnad/ddcolor_paper_tiny, arquitectura de https://github.com/piddnad/DDColor; Apache-2.0) |
 | `rmbg-1.4.onnx` | RMBG-1.4 (eliminación de fondo, IS-Net, fp32) | 176.153.355 B | https://huggingface.co/briaai/RMBG-1.4 (`onnx/model.onnx`; licencia bria-rmbg-1.4, **solo uso no comercial**) |
+| `birefnet-lite-768.onnx` | BiRefNet_lite a 768×768 (eliminación de fondo, fp32) | 183.891.984 B | **Exporte propio** (`tools/export_birefnet_768.py`, opset 17) de `ZhengPeng7/BiRefNet_lite` (https://huggingface.co/ZhengPeng7/BiRefNet_lite; **MIT**), hospedado en `RainBowDashX/photorestore-birefnet-768` |
 | `birefnet-lite-512.onnx` | BiRefNet_lite a 512×512 (eliminación de fondo, fp32) | 193.514.682 B | https://huggingface.co/Phoenix-ActuallyFree/BiRefNet_lite_512-ONNX (re-exporte de ZhengPeng7/BiRefNet_lite; el modelo base es **MIT**). Verificado contra el oficial a 1024 con foto real: correlación de máscaras 0,9989 |
 | `birefnet-lite.onnx` | BiRefNet_lite oficial a 1024×1024 (eliminación de fondo, fp32) | 224.005.088 B | https://huggingface.co/onnx-community/BiRefNet_lite-ONNX (`onnx/model.onnx`, exporte oficial de ZhengPeng7/BiRefNet; **MIT**). OJO: su grafo (16.400 nodos, convs deformables emuladas con GatherND/ScatterND) necesita ~8,7 GB de arena en la inferencia → `std::bad_alloc` en WASM (máx. 4 GB); solo usable con WebGPU en GPUs con bastante VRAM |
 
@@ -80,6 +82,21 @@ solo lo hospeda — el modelo es de piddnad (ver licencias en la tabla).
   la máscara. Postprocesado oficial: reescalado bilineal al tamaño original +
   min-max a [0,1] → canal alpha; el RGB de salida es el de la imagen original
   (nunca pasa por el modelo). Probado en navegador por el usuario.
+- `birefnet-lite-768.onnx` (exporte propio, entrada 768×768): input
+  `input_image` [1, 3, 768, 768] fp32, RGB estirado a 768×768 con
+  normalización ImageNet ((x/255 − mean)/std, mean [0.485,0.456,0.406],
+  std [0.229,0.224,0.225]) → output `output_image` [1, 1, 768, 768] fp32 con
+  la probabilidad de primer plano **ya con sigmoid** (integrado en el grafo,
+  como el 512). Las convs deformables (ASPPDeformable del decoder) se
+  exportan como GridSample: reimplementación propia validada por autotest
+  contra `torchvision.ops.deform_conv2d` (max diff 6e-6). Verificado contra
+  el PyTorch oficial (entrada aleatoria fija, seed 0): max abs diff = 0.0,
+  mean = 2.6e-8, corr ≈ 1.0. Pico de RAM en la inferencia CPU: ~1,3 GB
+  (vs ~8,7 GB del exporte oficial a 1024) → cómodo en WebGPU con GPUs de
+  6-8 GB y viable incluso con el fallback WASM. El grafo tiene 25.642 nodos
+  (el tracer legacy hornea constantes; los tensores intermedios máximos son
+  de 27 MB) y 72 ScatterND residuales de las máscaras de ventana de Swin
+  (tensores pequeños, sin impacto).
 - `birefnet-lite-512.onnx` (re-exporte de BiRefNet_lite con entrada 512×512):
   input `input_image` [1, 3, 512, 512] fp32, RGB estirado a 512×512 con
   normalización ImageNet ((x/255 − mean)/std, mean [0.485,0.456,0.406],
@@ -102,8 +119,8 @@ solo lo hospeda — el modelo es de piddnad (ver licencias en la tabla).
 
 ## Notas
 
-- `gfpgan-v1.4.onnx`, `ddcolor.onnx`, `rmbg-1.4.onnx`, `birefnet-lite-512.onnx`
-  y `birefnet-lite.onnx` están en `.gitignore`
+- `gfpgan-v1.4.onnx`, `ddcolor.onnx`, `rmbg-1.4.onnx`, `birefnet-lite-512.onnx`,
+  `birefnet-lite-768.onnx` y `birefnet-lite.onnx` están en `.gitignore`
   por su tamaño; el navegador los descarga bajo demanda (ver arriba). Todos los
   modelos se mantienen en fp32 (no fp16) porque el EP
   WASM/CPU de ONNX Runtime Web no tiene kernels fp16 para Conv, y el fallback

@@ -74,6 +74,20 @@
                    rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
             </p>
         </label>
+        <label class="mode-card @(modo == "fondoplus" ? "active" : "") @(ocupado ? "disabled" : "")">
+            <input type="radio" name="modo" value="fondoplus" checked="@(modo == "fondoplus")"
+                   disabled="@ocupado" @onchange='() => modo = "fondoplus"' />
+            <div class="mode-head">
+                <span class="mode-title">Quitar fondo Pro Plus</span>
+                <span class="mode-model">BiRefNet 768</span>
+            </div>
+            <p class="mode-desc">
+                Igual que Pro pero con la máscara calculada a 768×768: más del doble
+                de detalle en los bordes. Modelo pesado (~175 MB la primera vez).
+                <a class="mode-doc" href="https://github.com/ZhengPeng7/BiRefNet" target="_blank"
+                   rel="noopener noreferrer" @onclick:stopPropagation>Documentación oficial ↗</a>
+            </p>
+        </label>
         <label class="mode-card @(modo == "fondomax" ? "active" : "") @(ocupado ? "disabled" : "")">
             <input type="radio" name="modo" value="fondomax" checked="@(modo == "fondomax")"
                    disabled="@ocupado" @onchange='() => modo = "fondomax"' />
@@ -310,7 +324,7 @@
     private string? imagenNombre;
     private int imagenAncho;
     private int imagenAlto;
-    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN) | "colorizar" (DDColor) | "fondo" (RMBG-1.4) | "fondopro" (BiRefNet 512) | "fondomax" (BiRefNet 1024) | "sombra" (RMBG-1.4 + sombra sintética)
+    private string modo = "general"; // "general" (Real-ESRGAN) | "caras" (GFPGAN) | "colorizar" (DDColor) | "fondo" (RMBG-1.4) | "fondopro" (BiRefNet 512) | "fondoplus" (BiRefNet 768) | "fondomax" (BiRefNet 1024) | "sombra" (RMBG-1.4 + sombra sintética)
     private int factor = 1;
     private int sombraAngulo = 45;
     private int sombraDistancia = 25;
@@ -338,6 +352,7 @@
         "colorizar" => "color",
         "fondo" => "sin-fondo",
         "fondopro" => "sin-fondo-pro",
+        "fondoplus" => "sin-fondo-plus",
         "fondomax" => "sin-fondo-max",
         "sombra" => "con-sombra",
         _ => $"x{factor}"
@@ -350,6 +365,7 @@
         "colorizar" => "Colorizar foto",
         "fondo" => "Quitar fondo",
         "fondopro" => "Quitar fondo",
+        "fondoplus" => "Quitar fondo",
         "fondomax" => "Quitar fondo",
         "sombra" => "Añadir sombra",
         _ => "Restaurar"
@@ -473,6 +489,18 @@
                 resultWidth = result.Width;
                 resultHeight = result.Height;
                 info = "Fondo eliminado con BiRefNet. El PNG descargado conserva la transparencia.";
+                hintPendiente = true;
+            }
+            else if (modo == "fondoplus")
+            {
+                if (bgProModule is null) return;
+                estado = "Cargando modelo BiRefNet 768 (~175 MB la primera vez)…";
+                var result = await bgProModule.InvokeAsync<UpscaleResult>("removeBackgroundBiRefNetPlus", imagenBytes, imagenMime, progressRef);
+                resultUrl = result.ResultUrl;
+                backend = result.Backend;
+                resultWidth = result.Width;
+                resultHeight = result.Height;
+                info = "Fondo eliminado con BiRefNet a 768×768. El PNG descargado conserva la transparencia.";
                 hintPendiente = true;
             }
             else if (modo == "fondomax")
